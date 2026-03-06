@@ -1,0 +1,186 @@
+name: 📻 Build YOLogPRO_v17.1 — Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "yo_log_pro_v171.py"
+      - ".github/workflows/build.yml"
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ created ]
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: "Sufix optional (ex: beta1, rc1)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+
+  lint:
+    name: 🔍 Verificare sintaxa Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Verificare sintaxa
+        run: |
+          python -m py_compile yo_log_pro_v171.py
+          echo "Sintaxa Python OK"
+      - name: Pyflakes (non-blocant)
+        run: |
+          pip install pyflakes --quiet
+          python -m pyflakes yo_log_pro_v171.py || true
+
+  build-windows:
+    name: 🪟 Build Windows EXE (Win7 compat)
+    runs-on: windows-latest
+    needs: lint
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: "pip"
+
+      - name: Instalare dependente
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller==6.3.0
+          pip install pyserial
+
+      - name: Generare nume build
+        id: meta
+        shell: bash
+        run: |
+          DATE=$(date -u +"%Y%m%d")
+          SUFFIX="${{ github.event.inputs.version_suffix }}"
+          if [ -n "$SUFFIX" ]; then
+            NAME="YOLogPRO_v17.1_${DATE}_${SUFFIX}"
+          else
+            NAME="YOLogPRO_v17.1"
+          fi
+          echo "exe_name=${NAME}" >> $GITHUB_OUTPUT
+          echo "build_date=${DATE}" >> $GITHUB_OUTPUT
+          echo "Nume EXE: ${NAME}"
+
+      - name: Build EXE cu PyInstaller
+        shell: cmd
+        run: |
+          pyinstaller ^
+            --onefile ^
+            --windowed ^
+            --name "${{ steps.meta.outputs.exe_name }}" ^
+            --add-data "README.md;." ^
+            --add-data "docs;docs" ^
+            --hidden-import tkinter ^
+            --hidden-import tkinter.ttk ^
+            --hidden-import tkinter.messagebox ^
+            --hidden-import tkinter.filedialog ^
+            --hidden-import tkinter.scrolledtext ^
+            --hidden-import tkinter.colorchooser ^
+            --hidden-import serial ^
+            --hidden-import serial.tools ^
+            --hidden-import serial.tools.list_ports ^
+            --hidden-import winsound ^
+            --hidden-import pathlib ^
+            --hidden-import threading ^
+            --hidden-import socket ^
+            --hidden-import webbrowser ^
+            --hidden-import urllib.request ^
+            --hidden-import urllib.parse ^
+            --hidden-import urllib.error ^
+            --collect-all tkinter ^
+            --noupx ^
+            yo_log_pro_v171.py
+
+      - name: Verificare EXE generat
+        shell: pwsh
+        run: |
+          $exe = Get-Item "dist\*.exe"
+          $mb  = [math]::Round($exe.Length / 1MB, 2)
+          Write-Host "EXE: $($exe.Name) - $mb MB"
+
+      - name: Creare ZIP cu EXE si documente
+        shell: pwsh
+        run: |
+          $name = "${{ steps.meta.outputs.exe_name }}"
+          Copy-Item "README.md" "dist\README.md"
+          if (Test-Path "docs") {
+            Copy-Item "docs" "dist\docs" -Recurse
+          }
+          Compress-Archive -Path "dist\*" -DestinationPath "${name}_Windows.zip" -Force
+          Write-Host "ZIP: ${name}_Windows.zip"
+
+      - name: Upload EXE artifact (90 zile)
+        uses: actions/upload-artifact@v4
+        with:
+          name: YOLogPRO_v17.1_EXE
+          path: dist/${{ steps.meta.outputs.exe_name }}.exe
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload ZIP artifact (90 zile)
+        uses: actions/upload-artifact@v4
+        with:
+          name: YOLogPRO_v17.1_ZIP
+          path: ${{ steps.meta.outputs.exe_name }}_Windows.zip
+          retention-days: 90
+
+      - name: Atasare la GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.meta.outputs.exe_name }}.exe
+            ${{ steps.meta.outputs.exe_name }}_Windows.zip
+          body: |
+            ## YOLogPRO v17.1
+
+            Descarcare / Download:
+            - YOLogPRO_v17.1.exe - Windows 7/8/10/11, fara instalare
+            - YOLogPRO_v17.1_Windows.zip - EXE + manuale RO/EN
+
+            Build #${{ github.run_number }} | ${{ steps.meta.outputs.build_date }}
+
+            73 de YO8ACR!
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: 📋 Sumar build
+    runs-on: ubuntu-latest
+    needs: [ lint, build-windows ]
+    if: always()
+    steps:
+      - name: Scrie sumar
+        run: |
+          echo "## YOLogPRO v17.1 - Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.lint.result }}" = "success" ]; then
+            echo "| Lint sintaxa | OK |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Lint sintaxa | FAIL |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ needs.build-windows.result }}" = "success" ]; then
+            echo "| Build EXE Windows | OK |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Build EXE Windows | FAIL |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run #${{ github.run_number }} | Branch ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts disponibile 90 zile in tab Actions" >> $GITHUB_STEP_SUMMARY
+          echo "73 de YO8ACR!" >> $GITHUB_STEP_SUMMARY
