@@ -2231,70 +2231,77 @@ class LogEditorWindow(tk.Toplevel):
         self._tree.bind("<Delete>",    lambda e: self._delete_sel())
         self._tree.bind("<Button-3>",  self._ctx_menu)
 
-        # ─ Edit Form ─
-        ef = tk.LabelFrame(self, text=" ✏ Editare QSO — dublu-click pe rând sau completează mai jos și apasă Salvează ",
+        # ─ Edit Form — 2 rânduri grid clar ─
+        ef = tk.LabelFrame(self,
+                           text=" ✏ Editare QSO — dublu-click pe rând, modifică câmpurile și apasă Salvează ",
                            bg=TH["bg"], fg=TH["gold"],
-                           font=("Consolas", 9, "bold"),
-                           pady=8, padx=8)
+                           font=("Consolas", 9, "bold"), pady=6, padx=10)
         ef.pack(fill="x", padx=8, pady=(0,6))
 
-        eo = {"bg": TH["entry_bg"], "fg": TH["gold"],
-              "font": ("Consolas", 11), "insertbackground": TH["fg"],
-              "justify": "center", "width": 11,
-              "relief": "solid", "bd": 1}
-        lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 9)}
+        EO = dict(bg=TH["entry_bg"], fg=TH["gold"],
+                  font=("Consolas", 11), insertbackground="white",
+                  relief="solid", bd=1, justify="center")
+        LO = dict(bg=TH["bg"], fg="#aaaaaa", font=("Consolas", 8))
 
         self._ent = {}
-        fields = [
-            ("call",  "Indicativ", 14),
-            ("freq",  "Freq kHz",  9),
-            ("band",  "Bandă",     None),
-            ("mode",  "Mod",       None),
-            ("rst_s", "RST S",     5),
-            ("rst_r", "RST R",     5),
-            ("ss",    "Nr S",      6),
-            ("sr",    "Nr R",      6),
-            ("note",  "Notă",      13),
-            ("date",  "Dată",      11),
-            ("time",  "Oră",       7),
-        ]
-        for col, (key, label, width) in enumerate(fields):
-            frm = tk.Frame(ef, bg=TH["bg"])
-            frm.grid(row=0, column=col, padx=3, pady=2)
-            tk.Label(frm, text=label, **lo).pack()
-            if key == "band":
-                v = tk.StringVar()
-                w = ttk.Combobox(frm, textvariable=v,
-                                 values=BANDS_ALL, state="readonly", width=7)
-                w.pack(); self._ent[key] = v
-            elif key == "mode":
-                v = tk.StringVar()
-                w = ttk.Combobox(frm, textvariable=v,
-                                 values=MODES_ALL, state="readonly", width=7)
-                w.pack(); self._ent[key] = v
-            else:
-                e = tk.Entry(frm, width=width or 10, **eo)
-                e.pack(); self._ent[key] = e
-                if key == "call":
-                    e.bind("<KeyRelease>", self._on_call_key)
-                    # Callbook button inline
-                    tk.Button(frm, text="🌐",
-                              command=self._callbook_form,
-                              bg=TH["accent"], fg="white",
-                              font=("Consolas", 8), width=2).pack()
 
-        # Butoane form
-        bf2 = tk.Frame(ef, bg=TH["bg"])
-        bf2.grid(row=0, column=len(fields), padx=6)
-        self._save_btn2 = tk.Button(bf2, text="💾 Salvează",
-                                    command=self._save_entry,
-                                    bg=TH["ok"], fg="white",
-                                    font=("Consolas", 10, "bold"), width=11)
+        # Rândul 1: Call | Freq | Bandă | Mod | RST S | RST R | [Salvează] [Anulează]
+        r1 = tk.Frame(ef, bg=TH["bg"]); r1.pack(fill="x", pady=(4,2))
+
+        def _lbl_ent(parent, label, key, width, is_combo=False, combo_vals=None):
+            """Helper: label deasupra + widget intrare."""
+            frm = tk.Frame(parent, bg=TH["bg"])
+            frm.pack(side="left", padx=4)
+            tk.Label(frm, text=label, **LO).pack(anchor="w")
+            if is_combo:
+                v = tk.StringVar()
+                w = ttk.Combobox(frm, textvariable=v,
+                                 values=combo_vals or [], state="normal",
+                                 width=width, font=("Consolas",11))
+                w.pack()
+                self._ent[key] = v
+                return v, w
+            else:
+                e = tk.Entry(frm, width=width, **EO)
+                e.pack()
+                self._ent[key] = e
+                return e, e
+
+        # — Rândul 1 —
+        ce, _ = _lbl_ent(r1, "Indicativ", "call", 12)
+        ce.bind("<KeyRelease>", self._on_call_key)
+        # Buton callbook lângă câmpul indicativ
+        _cb_frm = tk.Frame(r1, bg=TH["bg"])
+        _cb_frm.pack(side="left", padx=0)
+        tk.Label(_cb_frm, text=" ", **dict(bg=TH["bg"], fg=TH["bg"], font=("Consolas",8))).pack()
+        tk.Button(_cb_frm, text="🌐", command=self._callbook_form,
+                  bg="#1a5276", fg="white",
+                  font=("Consolas",9), width=2).pack()
+
+        _lbl_ent(r1, "Freq (kHz)", "freq", 9)
+        _lbl_ent(r1, "Bandă",  "band", 7, is_combo=True, combo_vals=BANDS_ALL)
+        _lbl_ent(r1, "Mod",    "mode", 7, is_combo=True, combo_vals=MODES_ALL)
+        _lbl_ent(r1, "RST S",  "rst_s", 5)
+        _lbl_ent(r1, "RST R",  "rst_r", 5)
+
+        # Butoane Salvează / Anulează în rândul 1, dreapta
+        bf_r = tk.Frame(r1, bg=TH["bg"]); bf_r.pack(side="right", padx=8)
+        self._save_btn2 = tk.Button(bf_r, text="💾 Salvează",
+                                     command=self._save_entry,
+                                     bg=TH["ok"], fg="white",
+                                     font=("Consolas",10,"bold"), width=12)
         self._save_btn2.pack(pady=1)
-        tk.Button(bf2, text="✖ Anulează",
-                  command=self._cancel_edit,
+        tk.Button(bf_r, text="✖ Anulează", command=self._cancel_edit,
                   bg=TH["btn_bg"], fg="white",
-                  font=("Consolas", 9), width=11).pack(pady=1)
+                  font=("Consolas",9), width=12).pack(pady=1)
+
+        # — Rândul 2: Nr S | Nr R | Notă | Dată | Oră —
+        r2 = tk.Frame(ef, bg=TH["bg"]); r2.pack(fill="x", pady=(2,4))
+        _lbl_ent(r2, "Nr Serial S", "ss",   7)
+        _lbl_ent(r2, "Nr Serial R", "sr",   7)
+        _lbl_ent(r2, "Notă / Locator", "note", 22)
+        _lbl_ent(r2, "Dată (YYYY-MM-DD)", "date", 12)
+        _lbl_ent(r2, "Oră (HH:MM)", "time", 8)
 
         # Undo stack local
         self._undo_stack = deque(maxlen=50)
@@ -2595,117 +2602,149 @@ class LogEditorWindow(tk.Toplevel):
 # ═══════════════════════════════════════════════════════════
 
 class CallbookDialog(tk.Toplevel):
-    """Dialog căutare callbook: radioamator.ro (scraping) + QRZ.com web."""
+    """Dialog căutare callbook: radioamator.ro + QRZ.com
+    
+    Extrage date prin parsing HTML robust.
+    Afișează pagina web randată (tkinterweb dacă disponibil, altfel iframe-like).
+    """
 
     RADIOAMATOR_URL = "https://www.radioamator.ro/call-book/yocall.php?call={}"
     QRZ_URL         = "https://www.qrz.com/db/{}"
+
+    # Headers browser-like pentru a evita blocarea
+    HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
 
     def __init__(self, parent, call="", on_fill=None):
         super(CallbookDialog, self).__init__(parent)
         self._on_fill = on_fill
         self._result  = {}
+        self._html_raw = ""
         self.title("🌐 Callbook Lookup — YO Log PRO v17.1")
-        self.geometry("660x480")
+        self.geometry("780x600")
         self.configure(bg=TH["bg"])
         self.transient(parent)
+        self.resizable(True, True)
         self._build()
         center_dialog(self, parent)
         if call:
+            self._call_e.delete(0, "end")
             self._call_e.insert(0, call.upper())
-            self.after(100, self._search)
+            self.after(150, self._search)
 
+    # ── Build UI ──────────────────────────────────────────
     def _build(self):
         eo = {"bg": TH["entry_bg"], "fg": TH["gold"],
-              "font": ("Consolas", 12), "insertbackground": TH["fg"]}
+              "font": ("Consolas", 13, "bold"),
+              "insertbackground": "white", "width": 12,
+              "relief": "solid", "bd": 1, "justify": "center"}
 
         # ─ Search bar ─
-        sf = tk.Frame(self, bg=TH["header_bg"], pady=6)
+        sf = tk.Frame(self, bg=TH["header_bg"], pady=8)
         sf.pack(fill="x")
+
         tk.Label(sf, text="Indicativ:", bg=TH["header_bg"],
-                 fg=TH["fg"], font=("Consolas", 11)).pack(side="left", padx=8)
-        self._call_e = tk.Entry(sf, width=14, **eo)
+                 fg=TH["fg"], font=("Consolas", 11)).pack(side="left", padx=(10,4))
+        self._call_e = tk.Entry(sf, **eo)
         self._call_e.pack(side="left", padx=4)
         self._call_e.bind("<Return>", lambda e: self._search())
 
         self._src_v = tk.StringVar(value="radioamator.ro")
         for src in ("radioamator.ro", "QRZ.com"):
             tk.Radiobutton(sf, text=src, variable=self._src_v, value=src,
-                           bg=TH["header_bg"], fg=TH["fg"],
+                           bg=TH["header_bg"], fg="white",
                            selectcolor=TH["entry_bg"],
                            activebackground=TH["header_bg"],
-                           font=("Consolas", 10)).pack(side="left", padx=4)
+                           font=("Consolas", 10)).pack(side="left", padx=6)
 
         tk.Button(sf, text="🔍 Caută", command=self._search,
                   bg=TH["accent"], fg="white",
-                  font=("Consolas", 11, "bold"), width=10).pack(side="left", padx=6)
-        tk.Button(sf, text="🌐 Deschide browser",
+                  font=("Consolas", 11, "bold"), width=10).pack(side="left", padx=8)
+        tk.Button(sf, text="🌐 Browser",
                   command=self._open_browser,
-                  bg=TH["btn_bg"], fg="white",
-                  font=("Consolas", 10), width=16).pack(side="left", padx=4)
+                  bg="#1a5276", fg="white",
+                  font=("Consolas", 10), width=10).pack(side="left", padx=2)
 
         self._spin_lbl = tk.Label(sf, text="", bg=TH["header_bg"],
-                                   fg=TH["warn"], font=("Consolas", 10))
-        self._spin_lbl.pack(side="right", padx=8)
+                                   fg=TH["warn"], font=("Consolas", 10, "bold"))
+        self._spin_lbl.pack(side="right", padx=10)
 
-        # ─ Result panel ─
-        rf = tk.Frame(self, bg=TH["bg"])
-        rf.pack(fill="both", expand=True, padx=10, pady=6)
-
-        # Info fields grid
-        self._info_frame = tk.Frame(rf, bg=TH["bg"])
-        self._info_frame.pack(fill="x", pady=(0,6))
+        # ─ Info panel (câmpuri extrase) ─
+        ip = tk.Frame(self, bg=TH["bg"], pady=4)
+        ip.pack(fill="x", padx=10)
 
         self._info_labels = {}
         info_fields = [
-            ("call",    "Indicativ"),
-            ("name",    "Nume"),
-            ("qth",     "QTH"),
-            ("loc",     "Locator"),
-            ("dxcc",    "DXCC"),
-            ("itu",     "ITU Zonă"),
-            ("cq",      "CQ Zonă"),
-            ("class",   "Clasă"),
-            ("email",   "Email"),
-            ("expires", "Expiră"),
+            ("call",    "Indicativ"), ("name",    "Nume"),
+            ("qth",     "QTH"),       ("loc",     "Locator"),
+            ("dxcc",    "DXCC"),      ("class",   "Clasă"),
+            ("itu",     "ITU"),       ("cq",      "CQ Zonă"),
+            ("expires", "Expiră"),    ("email",   "Email"),
         ]
         for i, (key, lbl) in enumerate(info_fields):
-            r, c = divmod(i, 2)
-            frm = tk.Frame(self._info_frame, bg=TH["bg"])
-            frm.grid(row=r, column=c, sticky="w", padx=8, pady=2)
+            r, col = divmod(i, 5)
+            frm = tk.Frame(ip, bg=TH["bg"])
+            frm.grid(row=r, column=col, sticky="w", padx=8, pady=1)
             tk.Label(frm, text=f"{lbl}:",
-                     bg=TH["bg"], fg=TH["fg"],
-                     font=("Consolas", 9), width=10, anchor="e").pack(side="left")
+                     bg=TH["bg"], fg="#888888",
+                     font=("Consolas", 8), width=9, anchor="e").pack(side="left")
             val = tk.Label(frm, text="—", bg=TH["bg"],
-                           fg=TH["gold"], font=("Consolas", 10, "bold"),
-                           anchor="w", width=28)
+                           fg=TH["gold"], font=("Consolas", 9, "bold"),
+                           anchor="w", width=18)
             val.pack(side="left")
             self._info_labels[key] = val
 
-        # Vizualizator pagină web
-        web_hdr = tk.Frame(rf, bg=TH["bg"])
-        web_hdr.pack(fill="x")
-        tk.Label(web_hdr, text="Previzualizare pagină web:", bg=TH["bg"],
-                 fg=TH["fg"], font=("Consolas", 8)).pack(side="left")
-        tk.Button(web_hdr, text="↺ Reîncarcă pagina",
-                  command=self._reload_webview,
-                  bg=TH["btn_bg"], fg="white",
-                  font=("Consolas", 8), width=16).pack(side="right")
+        # ─ Tab: Pagina Web | Text brut ─
+        nb = ttk.Notebook(self)
+        nb.pack(fill="both", expand=True, padx=8, pady=4)
 
-        # Încearcă tkhtmlview pentru randare HTML
-        self._html_widget = None
+        # Tab 1: Pagina web (tkinterweb sau ScrolledText cu HTML2Text)
+        tab_web = tk.Frame(nb, bg=TH["bg"])
+        nb.add(tab_web, text="  🌐 Pagina web  ")
+
+        self._webview = None
         try:
-            from tkhtmlview import HTMLScrolledText
-            self._html_widget = HTMLScrolledText(rf, height=9,
-                html="<p style='color:gray'>Caută un indicativ...</p>")
-            self._html_widget.pack(fill="both", expand=True)
+            import tkinterweb
+            self._webview = tkinterweb.HtmlFrame(tab_web, messages_enabled=False)
+            self._webview.pack(fill="both", expand=True)
+            self._webview.load_html("<p style='color:gray;font-family:monospace'>Caută un indicativ...</p>")
         except ImportError:
-            # Fallback: ScrolledText cu text plain
-            self._raw_box = scrolledtext.ScrolledText(
-                rf, height=9, bg=TH["entry_bg"], fg=TH["ok"],
-                font=("Consolas", 8), state="disabled",
-                insertbackground=TH["fg"])
-            self._raw_box.pack(fill="both", expand=True)
-            self._html_widget = None
+            try:
+                from tkhtmlview import HTMLScrolledText
+                self._webview = HTMLScrolledText(tab_web, height=12,
+                    html="<p style='color:gray'>Caută un indicativ...</p>")
+                self._webview.pack(fill="both", expand=True)
+                self._webview_type = "tkhtmlview"
+            except ImportError:
+                self._webview = scrolledtext.ScrolledText(
+                    tab_web, bg=TH["entry_bg"], fg="#cccccc",
+                    font=("Consolas", 9), wrap="word")
+                self._webview.pack(fill="both", expand=True)
+                self._webview.insert("end", "Instalează tkinterweb pentru previzualizare web:\n"
+                                     "  pip install tkinterweb\n\n"
+                                     "sau tkhtmlview:\n  pip install tkhtmlview\n\n"
+                                     "Caută un indicativ pentru a vedea datele text.")
+                self._webview.config(state="disabled")
+                self._webview_type = "text"
+        else:
+            self._webview_type = "tkinterweb"
+
+        # Tab 2: Date parsate text
+        tab_txt = tk.Frame(nb, bg=TH["bg"])
+        nb.add(tab_txt, text="  📋 Date extrase  ")
+        self._data_box = scrolledtext.ScrolledText(
+            tab_txt, bg=TH["entry_bg"], fg=TH["ok"],
+            font=("Consolas", 10), wrap="word", state="disabled")
+        self._data_box.pack(fill="both", expand=True)
 
         # ─ Buttons ─
         bf = tk.Frame(self, bg=TH["bg"], pady=6)
@@ -2723,7 +2762,7 @@ class CallbookDialog(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white",
                   font=("Consolas", 10), width=10).pack(side="right", padx=8)
 
-    # ── Search ─────────────────────────────────────────────
+    # ── Search ────────────────────────────────────────────
     def _search(self):
         call = self._call_e.get().strip().upper()
         if not call:
@@ -2731,275 +2770,276 @@ class CallbookDialog(tk.Toplevel):
         src = self._src_v.get()
         self._set_loading(True)
         self._clear_fields()
-        threading.Thread(
-            target=self._fetch_thread,
-            args=(call, src),
-            daemon=True
-        ).start()
+        threading.Thread(target=self._fetch_thread,
+                         args=(call, src), daemon=True).start()
 
     def _fetch_thread(self, call, src):
         try:
             if src == "radioamator.ro":
-                data, raw = self._fetch_radioamator(call)
+                data, html = self._fetch_radioamator(call)
             else:
-                data, raw = self._fetch_qrz(call)
-            self.after(0, lambda: self._show_result(data, raw))
+                data, html = self._fetch_qrz(call)
+            self.after(0, lambda: self._show_result(data, html, src))
         except Exception as e:
             self.after(0, lambda: self._show_error(str(e)))
 
+    # ── Fetch radioamator.ro ──────────────────────────────
+    # ── Fetch radioamator.ro ──────────────────────────────
     def _fetch_radioamator(self, call):
-        """Scraping www.radioamator.ro/call-book/yocall.php"""
+        """Fetch + parse www.radioamator.ro/call-book/yocall.php
+        Parsează tabelul HTML rând cu rând: <td>Label</td><td>Valoare</td>
+        """
+        import html as hmod, gzip as gz
         url = self.RADIOAMATOR_URL.format(call.upper())
-        req = Request(url, headers={
-            "User-Agent": "YOLogPROv171/callbook (+https://github.com)",
-            "Accept": "text/html",
-        })
         try:
-            resp = urlopen(req, timeout=8)
-            html = resp.read().decode("utf-8", errors="ignore")
+            req = Request(url, headers=self.HEADERS)
+            resp = urlopen(req, timeout=12)
+            raw = resp.read()
         except Exception as e:
-            return {}, f"Eroare conectare: {e}"
+            return {"call": call, "_error": str(e)}, ""
+        try:
+            html = gz.decompress(raw).decode("utf-8", errors="ignore")
+        except Exception:
+            try:   html = raw.decode("utf-8", errors="ignore")
+            except Exception: html = raw.decode("latin-1", errors="ignore")
 
+        h = hmod.unescape(html)
         data = {"call": call}
 
-        # Extrage câmpuri din tabel HTML radioamator.ro
-        # Pattern: <td class="...">Label</td><td>Valoare</td>
-        patterns = {
-            "name":    [r'Nume[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Name[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "qth":     [r'QTH[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Localitate[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "loc":     [r'Locator[^<]*</t[dh]>\s*<td[^>]*>([A-R]{2}\d{2}[A-X]{0,2})',
-                        r'>([A-R]{2}\d{2}[A-X]{2})<'],
-            "class":   [r'Clas[aă][^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "expires": [r'Expir[aă][^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Valabil[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "itu":     [r'ITU[^<]*</t[dh]>\s*<td[^>]*>(\d+)<'],
-            "cq":      [r'CQ[^<]*</t[dh]>\s*<td[^>]*>(\d+)<'],
-            "dxcc":    [r'DXCC[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
+        def strip_tags(s):
+            return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s)).strip()
+
+        LABEL_MAP = {
+            "indicativ":"call","callsign":"call","proprietar":"name","titular":"name",
+            "denumire":"name","localitate":"qth","oras":"qth","adresa":"qth","qth":"qth",
+            "judet":"county","locator":"loc","grid":"loc","clasa":"class","categorie":"class",
+            "zona itu":"itu","itu":"itu","zona cq":"cq","cq":"cq",
+            "expir":"expires","valabil":"expires","email":"email","dxcc":"dxcc",
         }
-        for field, pats in patterns.items():
-            for pat in pats:
-                m = re.search(pat, html, re.IGNORECASE | re.DOTALL)
-                if m:
-                    val = m.group(1).strip()
-                    val = re.sub(r'<[^>]+>', '', val).strip()
-                    if val and val != "—":
-                        data[field] = val
-                        break
 
-        # Fallback locator: caută orice grid square valid
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", h, re.IGNORECASE|re.DOTALL)
+        for row in rows:
+            cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.IGNORECASE|re.DOTALL)
+            if len(cells) >= 2:
+                lbl = strip_tags(cells[0]).lower().strip(" :.")
+                val = strip_tags(cells[1]).strip()
+                if not lbl or not val or val in ("-","—","N/A",""): continue
+                for kw, fld in LABEL_MAP.items():
+                    if kw in lbl and fld not in data:
+                        data[fld] = val; break
+
+        # Locator fallback
         if "loc" not in data:
-            for m in re.finditer(r'([A-R]{2}\d{2}[A-X]{2})', html, re.IGNORECASE):
-                candidate = m.group(1).upper()
-                if Loc.valid(candidate):
-                    data["loc"] = candidate
-                    break
+            for m in re.finditer(r"\b([A-R]{2}\d{2}[A-X]{2})\b", h, re.IGNORECASE):
+                cand = m.group(1).upper()
+                if re.match(r"^[A-R]{2}\d{2}[A-X]{2}$", cand, re.IGNORECASE):
+                    data["loc"] = cand; break
 
-        # Detectează "nu există" / "not found"
-        if re.search(r'(nu a fost g[aă]sit|not found|nu exist[aă]|no result)',
-                     html, re.IGNORECASE):
-            data["_not_found"] = True
+        # Email fallback
+        if "email" not in data:
+            m = re.search(r'mailto:([^\s"\'><]{5,60})', h)
+            if m: data["email"] = m.group(1)
 
-        # Scurtează rawul
-        raw_short = re.sub(r'\s+', ' ', html)[:3000]
-        return data, raw_short
+        if "dxcc" not in data:
+            country, _ = DXCC.lookup(call)
+            if country != "Unknown": data["dxcc"] = country
 
+        if re.search(r"(nu a fost gasit|nu a fost găsit|not found|nu exista|nu există|"
+                     r"indicativ invalid|no result|nu avem date|nu s-a gasit)",
+                     h, re.IGNORECASE):
+            if len(data) <= 2: data["_not_found"] = True
+
+        return data, html
+
+    # ── Fetch QRZ.com ─────────────────────────────────────
     def _fetch_qrz(self, call):
-        """Deschide QRZ.com și extrage date de bază din HTML public."""
-        url = self.QRZ_URL.format(call)
-        req = Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; YOLogPROv171)",
-            "Accept": "text/html",
-        })
+        """Fetch QRZ.com public page și extrage date."""
+        import html as hmod, gzip as gz
+        url = self.QRZ_URL.format(call.upper())
         try:
-            resp = urlopen(req, timeout=8)
-            html = resp.read().decode("utf-8", errors="ignore")
+            req = Request(url, headers=self.HEADERS)
+            resp = urlopen(req, timeout=12)
+            raw = resp.read()
         except Exception as e:
-            return {}, f"Eroare conectare QRZ: {e}"
+            return {"call": call, "_error": str(e)}, ""
+        try:
+            html = gz.decompress(raw).decode("utf-8", errors="ignore")
+        except Exception:
+            try:   html = raw.decode("utf-8", errors="ignore")
+            except Exception: html = raw.decode("latin-1", errors="ignore")
 
+        h = hmod.unescape(html)
         data = {"call": call}
 
-        patterns = {
-            "name":  [r'<title>[^-]*-\s*([^<]+?)\s*-.*QRZ',
-                      r'fname["\s]+value="([^"]+)"',
-                      r'<h1[^>]*>\s*([A-Z][^<]{3,40}?)\s*</h1>'],
-            "qth":   [r'addr2["\s]+value="([^"]+)"',
-                      r'<td[^>]*>\s*QTH\s*</td>\s*<td[^>]*>([^<]+)<'],
-            "loc":   [r'grid["\s]+value="([A-R]{2}\d{2}[A-Xa-x]{0,2})"',
-                      r'([A-R]{2}\d{2}[A-X]{2})'],
-            "dxcc":  [r'dxcc["\s]+value="([^"]+)"',
-                      r'DXCC.*?<td[^>]*>([^<]+)<'],
-            "cq":    [r'cqzone["\s]+value="(\d+)"'],
-            "itu":   [r'ituzone["\s]+value="(\d+)"'],
-            "class": [r'class["\s]+value="([^"]+)"'],
-        }
-        for field, pats in patterns.items():
+        def strip_tags(s):
+            return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s)).strip()
+
+        def fv(pats):
             for pat in pats:
-                m = re.search(pat, html, re.IGNORECASE | re.DOTALL)
+                m = re.search(pat, h, re.IGNORECASE|re.DOTALL)
                 if m:
-                    val = re.sub(r'<[^>]+>', '', m.group(1)).strip()
-                    if val:
-                        data[field] = val
-                        break
+                    v = strip_tags(m.group(1))
+                    if v and len(v) > 1 and v not in ("-","—"): return v
+            return ""
+
+        v = fv([r'"name"\s+value="([^"]{2,60})"',
+                r'"fname"\s+value="([^"]{2,40})"',
+                r'<span[^>]*itemprop="name"[^>]*>([^<]{2,60})'])
+        if v: data["name"] = v
+
+        v = fv([r'"addr2"\s+value="([^"]{2,80})"',
+                r'<span[^>]*id="addr2"[^>]*>([^<]{2,80})'])
+        if v: data["qth"] = v
+
+        v = fv([r'"grid"\s+value="([A-R]{2}\d{2}[A-Xa-x]{2})"'])
+        if v: data["loc"] = v
+
+        v = fv([r'"cqzone"\s+value="(\d+)"'])
+        if v: data["cq"] = v
+
+        v = fv([r'"ituzone"\s+value="(\d+)"'])
+        if v: data["itu"] = v
+
+        v = fv([r'"class"\s+value="([^"]{1,10})"'])
+        if v: data["class"] = v
+
+        v = fv([r'"dxcc"\s+value="([^"]{2,30})"',
+                r'<span[^>]*itemprop="addressCountry"[^>]*>([^<]{2,30})'])
+        if v: data["dxcc"] = v
 
         if "loc" not in data:
-            for m in re.finditer(r'([A-R]{2}\d{2}[A-X]{2})', html):
-                if Loc.valid(m.group(1).upper()):
-                    data["loc"] = m.group(1).upper()
-                    break
+            for m in re.finditer(r"\b([A-R]{2}\d{2}[A-X]{2})\b", h):
+                if re.match(r"^[A-R]{2}\d{2}[A-X]{2}$", m.group(1).upper()):
+                    data["loc"] = m.group(1).upper(); break
 
-        not_found = re.search(
-            r'(not\s*found|no\s*record|callsign\s*not)', html, re.IGNORECASE)
-        if not_found:
+        if "dxcc" not in data:
+            country, _ = DXCC.lookup(call)
+            if country != "Unknown": data["dxcc"] = country
+
+        if re.search(r"(not found|no record|callsign not found|This callsign is not in)",
+                     h, re.IGNORECASE):
             data["_not_found"] = True
 
-        raw_short = re.sub(r'\s+', ' ', html)[:3000]
-        return data, raw_short
+        return data, html
 
-    # ── Display ────────────────────────────────────────────
-    def _reload_webview(self):
-        """Reîncarcă pagina web în previzualizator."""
-        call = self._call_e.get().strip().upper()
-        if not call: return
-        src = self._src_v.get()
-        if src == "radioamator.ro":
-            url = self.RADIOAMATOR_URL.format(call)
-        else:
-            url = self.QRZ_URL.format(call)
-        self._load_url_in_widget(url)
-
-    def _load_url_in_widget(self, url):
-        """Încarcă URL în widget-ul de previzualizare."""
-        def _fetch():
-            try:
-                req = Request(url, headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Accept": "text/html",
-                })
-                resp = urlopen(req, timeout=8)
-                html = resp.read().decode("utf-8", errors="ignore")
-                self.after(0, lambda: self._set_webview(html, url))
-            except Exception as e:
-                self.after(0, lambda: self._set_webview(
-                    f"<p style='color:red'>Eroare: {e}</p>", url))
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def _show_result(self, data, raw):
+    # ── Display ───────────────────────────────────────────
+    def _show_result(self, data, html, src=""):
         self._set_loading(False)
         self._result = data
+        self._html_raw = html
+
+        if data.get("_error"):
+            self._show_error(data["_error"]); return
 
         if data.get("_not_found"):
-            self._set_webview("<p style='color:orange'>⚠ Indicativul " + data.get("call","") + " nu a fost găsit în baza de date.</p>", "")
-            for lbl in self._info_labels.values():
-                lbl.config(text="—")
+            for lbl in self._info_labels.values(): lbl.config(text="—")
+            self._set_data_box(f"⚠ Indicativul {data.get('call','')} nu a fost găsit.")
+            self._load_webview(html, src)
             return
 
-        field_map = {
-            "call": "call", "name": "name", "qth": "qth",
-            "loc": "loc", "dxcc": "dxcc", "itu": "itu",
-            "cq": "cq", "class": "class",
-            "email": "email", "expires": "expires"
-        }
-        for key, src in field_map.items():
-            val = data.get(src, "")
+        # Populează câmpuri
+        for key in ("call","name","qth","loc","dxcc","class","itu","cq","expires","email"):
+            val = data.get(key, "")
             if self._info_labels.get(key):
                 self._info_labels[key].config(text=val or "—")
 
-        # Dacă nu avem locator, fallback din DXCC
-        if not data.get("loc"):
-            call = data.get("call","")
-            country, _ = DXCC.lookup(call)
-            if country != "Unknown" and self._info_labels.get("dxcc"):
-                self._info_labels["dxcc"].config(text=country)
+        # Tab "Date extrase"
+        lines = []
+        field_names = {"call":"Indicativ","name":"Nume","qth":"QTH","loc":"Locator",
+                       "dxcc":"DXCC","class":"Clasă","itu":"ITU Zonă","cq":"CQ Zonă",
+                       "expires":"Expiră","email":"Email"}
+        for key, label in field_names.items():
+            val = data.get(key, "—")
+            lines.append(f"  {label:<14}: {val}")
+        self._set_data_box("\n".join(lines))
 
-        # Încarcă pagina web în previzualizator
-        call = data.get("call","")
-        src = self._src_v.get()
-        if call:
-            if src == "radioamator.ro":
-                url = self.RADIOAMATOR_URL.format(call)
-            else:
-                url = self.QRZ_URL.format(call)
-            self._load_url_in_widget(url)
-        else:
-            self._set_webview("<pre>" + raw[:3000] + "</pre>", "")
+        # Încarcă pagina web
+        self._load_webview(html, src)
 
     def _show_error(self, msg):
         self._set_loading(False)
-        self._set_webview("<p style='color:red'>⚠ Eroare: " + msg + "<br><br>Verificați conexiunea la internet.</p>", "")
+        self._set_data_box(f"⚠ Eroare: {msg}\n\nVerificați conexiunea la internet.")
+        self._load_webview("", "")
+
+    def _load_webview(self, html, src):
+        """Afișează pagina în tab-ul web."""
+        if not html:
+            html = "<p style='color:gray;font-family:monospace'>Nu există date de afișat.</p>"
+        try:
+            if self._webview_type == "tkinterweb":
+                self._webview.load_html(html)
+            elif self._webview_type == "tkhtmlview":
+                self._webview.set_html(html)
+            else:
+                # Text fallback: strip HTML tags
+                import html as hm
+                txt = hm.unescape(re.sub(r'<[^>]+>', ' ', html))
+                txt = re.sub(r'\s+', ' ', txt).strip()
+                self._webview.config(state="normal")
+                self._webview.delete("1.0","end")
+                self._webview.insert("end", txt[:6000])
+                self._webview.config(state="disabled")
+        except Exception:
+            pass
+
+    def _reload_webview(self):
+        if self._html_raw:
+            src = self._src_v.get()
+            self._load_webview(self._html_raw, src)
+
+    def _set_data_box(self, text):
+        try:
+            self._data_box.config(state="normal")
+            self._data_box.delete("1.0","end")
+            self._data_box.insert("end", text)
+            self._data_box.config(state="disabled")
+        except Exception: pass
 
     def _set_loading(self, state):
-        try:
-            self._spin_lbl.config(text="⏳ Se caută..." if state else "")
-        except Exception:
-            pass
+        try: self._spin_lbl.config(text="⏳ Se caută..." if state else "")
+        except Exception: pass
 
     def _clear_fields(self):
-        for lbl in self._info_labels.values():
-            lbl.config(text="—")
-        self._set_raw("")
+        for lbl in self._info_labels.values(): lbl.config(text="—")
+        self._set_data_box("")
 
-    def _set_webview(self, html_or_text, url=""):
-        """Afișează HTML în widget-ul de previzualizare."""
-        try:
-            if self._html_widget is not None:
-                # tkhtmlview disponibil
-                self._html_widget.set_html(html_or_text)
-            else:
-                # Fallback text plain
-                import re as _re
-                text = _re.sub(r'<[^>]+>', ' ', html_or_text)
-                text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-                text = _re.sub(r'\s+', ' ', text).strip()
-                self._raw_box.config(state="normal")
-                self._raw_box.delete("1.0", "end")
-                if url:
-                    self._raw_box.insert("end", f"URL: {url}\n\n")
-                self._raw_box.insert("end", text[:4000])
-                self._raw_box.config(state="disabled")
-        except Exception:
-            pass
-
-    def _set_raw(self, text):
-        """Compatibilitate: redirecționează spre _set_webview."""
-        self._set_webview(text)
-
-    # ── Actions ────────────────────────────────────────────
     def _use_loc(self):
         loc = self._result.get("loc","")
         if not loc:
-            messagebox.showinfo("Callbook", "Nu s-a găsit locator."); return
+            messagebox.showinfo("Callbook","Nu s-a găsit locator."); return
         if self._on_fill:
             self._on_fill(self._result)
-            messagebox.showinfo("Callbook",
-                f"✓ Locatorul {loc} a fost copiat în câmpul Notă.")
+            messagebox.showinfo("Callbook", f"✓ Locatorul {loc} copiat în câmpul Notă.")
         else:
-            try:
-                self.clipboard_clear()
-                self.clipboard_append(loc)
-                messagebox.showinfo("Callbook",
-                    f"✓ Locatorul {loc} copiat în clipboard.")
-            except Exception:
-                pass
+            try: self.clipboard_clear(); self.clipboard_append(loc)
+            except Exception: pass
+            messagebox.showinfo("Callbook", f"✓ Locatorul {loc} copiat în clipboard.")
 
     def _copy_call(self):
         call = self._result.get("call","") or self._call_e.get().strip().upper()
         if call:
-            try:
-                self.clipboard_clear()
-                self.clipboard_append(call)
-            except Exception:
-                pass
+            try: self.clipboard_clear(); self.clipboard_append(call)
+            except Exception: pass
 
     def _open_browser(self):
         call = self._call_e.get().strip().upper()
         if not call: return
         src = self._src_v.get()
         if src == "radioamator.ro":
-            webbrowser.open(self.RADIOAMATOR_URL.format(quote_plus(call)))
+            webbrowser.open(self.RADIOAMATOR_URL.format(call))
         else:
             webbrowser.open(self.QRZ_URL.format(call))
+
+    @staticmethod
+    def _open_qrz(call):
+        if call: webbrowser.open(f"https://www.qrz.com/db/{call.upper()}")
+
+    @staticmethod
+    def _open_ro(call):
+        if call:
+            webbrowser.open(
+                f"https://www.radioamator.ro/call-book/yocall.php?call={call.upper()}")
+
 
 
 # ═══════════════════════════════════════════════════════════
