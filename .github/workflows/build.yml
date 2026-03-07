@@ -36,7 +36,7 @@ jobs:
       - name: Verificare sintaxa
         run: |
           python -m py_compile yo_log_pro_v171.py
-          echo "Sintaxa Python OK"
+          echo "✅ Sintaxa Python OK"
 
       - name: Pyflakes (non-blocant)
         run: |
@@ -64,7 +64,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller==6.3.0
           pip install pyserial
-          pip install tkhtmlview || echo "tkhtmlview optional - fallback text mode"
+          pip install tkinterweb  || echo "tkinterweb  optional"
+          pip install tkhtmlview  || echo "tkhtmlview  optional"
 
       - name: Generare nume build
         id: meta
@@ -86,20 +87,19 @@ jobs:
         shell: bash
         run: |
           if [ -f "icon.ico" ]; then
-            echo "has_icon=true" >> $GITHUB_OUTPUT
+            echo "has_icon=true"  >> $GITHUB_OUTPUT
             echo "Icon gasit: icon.ico"
           else
             echo "has_icon=false" >> $GITHUB_OUTPUT
-            echo "Nu exista icon.ico — build fara icon"
+            echo "Fara icon.ico — build continua"
           fi
 
-      - name: Build EXE cu PyInstaller (cu icon)
+      - name: Build EXE (cu icon)
         if: steps.icon.outputs.has_icon == 'true'
         shell: cmd
         run: |
           pyinstaller ^
-            --onefile ^
-            --windowed ^
+            --onefile --windowed ^
             --name "${{ steps.meta.outputs.exe_name }}" ^
             --icon "icon.ico" ^
             --add-data "README.md;." ^
@@ -110,6 +110,7 @@ jobs:
             --hidden-import tkinter.filedialog ^
             --hidden-import tkinter.scrolledtext ^
             --hidden-import tkinter.colorchooser ^
+            --hidden-import tkinter.font ^
             --hidden-import serial ^
             --hidden-import serial.tools ^
             --hidden-import serial.tools.list_ports ^
@@ -121,18 +122,26 @@ jobs:
             --hidden-import urllib.request ^
             --hidden-import urllib.parse ^
             --hidden-import urllib.error ^
+            --hidden-import html ^
+            --hidden-import gzip ^
+            --hidden-import io ^
+            --hidden-import copy ^
+            --hidden-import json ^
+            --hidden-import csv ^
+            --hidden-import re ^
+            --hidden-import tkinterweb ^
             --hidden-import tkhtmlview ^
             --collect-all tkinter ^
+            --collect-all tkinterweb ^
             --noupx ^
             yo_log_pro_v171.py
 
-      - name: Build EXE cu PyInstaller (fara icon)
+      - name: Build EXE (fara icon)
         if: steps.icon.outputs.has_icon != 'true'
         shell: cmd
         run: |
           pyinstaller ^
-            --onefile ^
-            --windowed ^
+            --onefile --windowed ^
             --name "${{ steps.meta.outputs.exe_name }}" ^
             --add-data "README.md;." ^
             --add-data "docs;docs" ^
@@ -142,6 +151,7 @@ jobs:
             --hidden-import tkinter.filedialog ^
             --hidden-import tkinter.scrolledtext ^
             --hidden-import tkinter.colorchooser ^
+            --hidden-import tkinter.font ^
             --hidden-import serial ^
             --hidden-import serial.tools ^
             --hidden-import serial.tools.list_ports ^
@@ -153,8 +163,17 @@ jobs:
             --hidden-import urllib.request ^
             --hidden-import urllib.parse ^
             --hidden-import urllib.error ^
+            --hidden-import html ^
+            --hidden-import gzip ^
+            --hidden-import io ^
+            --hidden-import copy ^
+            --hidden-import json ^
+            --hidden-import csv ^
+            --hidden-import re ^
+            --hidden-import tkinterweb ^
             --hidden-import tkhtmlview ^
             --collect-all tkinter ^
+            --collect-all tkinterweb ^
             --noupx ^
             yo_log_pro_v171.py
 
@@ -163,21 +182,17 @@ jobs:
         run: |
           $exe = Get-Item "dist\*.exe"
           $mb  = [math]::Round($exe.Length / 1MB, 2)
-          Write-Host "EXE: $($exe.Name) - $mb MB"
+          Write-Host "✅ EXE: $($exe.Name) — $mb MB"
 
-      - name: Creare ZIP cu EXE + documente
+      - name: Creare ZIP (EXE + docs + icon)
         shell: pwsh
         run: |
           $name = "${{ steps.meta.outputs.exe_name }}"
           Copy-Item "README.md" "dist\README.md"
-          if (Test-Path "docs") {
-            Copy-Item "docs" "dist\docs" -Recurse
-          }
-          if (Test-Path "icon.ico") {
-            Copy-Item "icon.ico" "dist\icon.ico"
-          }
+          if (Test-Path "docs")     { Copy-Item "docs"     "dist\docs"     -Recurse }
+          if (Test-Path "icon.ico") { Copy-Item "icon.ico" "dist\icon.ico" }
           Compress-Archive -Path "dist\*" -DestinationPath "${name}_Windows.zip" -Force
-          Write-Host "ZIP creat: ${name}_Windows.zip"
+          Write-Host "✅ ZIP: ${name}_Windows.zip"
 
       - name: Upload EXE artifact (90 zile)
         uses: actions/upload-artifact@v4
@@ -206,16 +221,16 @@ jobs:
 
             **Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)
 
-            ### Descărcare / Download:
+            ### Descărcare:
             - `YO_Log_PRO_v17.1.exe` — Windows 7/8/10/11, fără instalare
             - `YO_Log_PRO_v17.1_Windows.zip` — EXE + manuale RO/EN
 
             ### Nou în v17.1:
-            - 📝 Log Editor dedicat
+            - 📝 Log Editor dedicat cu editare completă
             - 🌐 Callbook radioamator.ro + QRZ.com cu previzualizare web
             - 📡 Band Map + DX Cluster + Scor Live
             - ⏱ Timer cu avertizări sonore 5/3/1 min
-            - 📻 CAT Radio complet
+            - 📻 CAT Radio complet (Yaesu/Icom/Kenwood/Elecraft/Hamlib)
 
             **Build** #${{ github.run_number }} | ${{ steps.meta.outputs.build_date }}
 
@@ -230,19 +245,19 @@ jobs:
     needs: [ lint, build-windows ]
     if: always()
     steps:
-      - name: Scrie sumar in Actions
+      - name: Scrie sumar
         run: |
-          echo "## 📻 YO Log PRO v17.1 - Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 📻 YO Log PRO v17.1 — Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.lint.result }}" = "success" ]; then
-            echo "| 🔍 Lint sintaxa | ✅ OK |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔍 Lint sintaxa     | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| 🔍 Lint sintaxa | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔍 Lint sintaxa     | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ needs.build-windows.result }}" = "success" ]; then
-            echo "| 🪟 Build EXE Windows | ✅ OK |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🪟 Build EXE Windows | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| 🪟 Build EXE Windows | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
           fi
