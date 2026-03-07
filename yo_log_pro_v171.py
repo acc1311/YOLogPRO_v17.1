@@ -1361,46 +1361,173 @@ class SearchDialog(tk.Toplevel):
         for nr,qso in results: self.tree.insert("","end",values=(nr,qso.get("c"),qso.get("b"),qso.get("m"),qso.get("d"),qso.get("n")))
 
 class TimerDialog(tk.Toplevel):
-    def __init__(self,parent):
-        super().__init__(parent); self.title(L.t("timer_t")); self.geometry("300x220"); self.configure(bg=TH["bg"]); self.transient(parent)
-        self._running=False; self._end_time=None; self._duration=0; self._elapsed_start=None; self._elapsed_secs=0
-        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}; eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":("Consolas",11),"justify":"center","insertbackground":TH["fg"]}
-        tk.Label(self,text=L.t("dur_h"),**lo).pack(pady=(15,0)); self._dur_e=tk.Entry(self,width=10,**eo); self._dur_e.insert(0,"4"); self._dur_e.pack(pady=4)
-        self._time_lbl=tk.Label(self,text="00:00:00",bg=TH["bg"],fg=TH["gold"],font=("Consolas",28,"bold")); self._time_lbl.pack(pady=10)
-        self._rem_lbl=tk.Label(self,text="",**lo); self._rem_lbl.pack()
-        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=8)
-        self._start_btn=tk.Button(bf,text=L.t("timer_start"),command=self._start,bg=TH["ok"],fg="white",font=("Consolas",11),width=8); self._start_btn.pack(side="left",padx=4)
-        tk.Button(bf,text=L.t("timer_reset"),command=self._reset,bg=TH["warn"],fg="white",font=("Consolas",11),width=8).pack(side="left",padx=4)
-        self._tick(); center_dialog(self,parent)
+    """Timer concurs cu avertizare sonoră la 5/3/1 min și final."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title(L.t("timer_t"))
+        self.geometry("360x300")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self.resizable(False, False)
+        self._running = False
+        self._end_time = None
+        self._duration = 0
+        self._elapsed_start = None
+        self._elapsed_secs = 0
+        self._alerted = set()   # seturi de alerte deja trase (5min,3min,1min,end)
+        self._build()
+        self._tick()
+        center_dialog(self, parent)
+
+    def _build(self):
+        lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 11)}
+        eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": ("Consolas", 11),
+              "justify": "center", "insertbackground": TH["fg"], "width": 6}
+
+        # ─ Durată ─
+        df = tk.Frame(self, bg=TH["bg"]); df.pack(pady=(14, 4))
+        tk.Label(df, text="Ore:", **lo).pack(side="left", padx=4)
+        self._h_e = tk.Entry(df, **eo); self._h_e.insert(0, "4"); self._h_e.pack(side="left")
+        tk.Label(df, text="Min:", **lo).pack(side="left", padx=(10, 4))
+        self._m_e = tk.Entry(df, **eo); self._m_e.insert(0, "0"); self._m_e.pack(side="left")
+
+        # ─ Ceas scurs ─
+        self._time_lbl = tk.Label(self, text="00:00:00",
+                                   bg=TH["bg"], fg=TH["gold"],
+                                   font=("Consolas", 34, "bold"))
+        self._time_lbl.pack(pady=6)
+
+        # ─ Rămas ─
+        self._rem_lbl = tk.Label(self, text="", **lo)
+        self._rem_lbl.pack()
+
+        # ─ Avertizări sonore ─
+        af = tk.LabelFrame(self, text=" 🔔 Avertizări sonore ",
+                           bg=TH["bg"], fg=TH["fg"],
+                           font=("Consolas", 9))
+        af.pack(fill="x", padx=12, pady=6)
+        self._alert_v = tk.BooleanVar(value=True)
+        tk.Checkbutton(af, text="Activ (5 min / 3 min / 1 min / Final)",
+                       variable=self._alert_v,
+                       bg=TH["bg"], fg=TH["fg"],
+                       activebackground=TH["bg"],
+                       selectcolor=TH["entry_bg"],
+                       font=("Consolas", 9)).pack(anchor="w", padx=6)
+
+        # ─ Butoane ─
+        bf = tk.Frame(self, bg=TH["bg"]); bf.pack(pady=8)
+        self._start_btn = tk.Button(bf, text=L.t("timer_start"),
+                                     command=self._start,
+                                     bg=TH["ok"], fg="white",
+                                     font=("Consolas", 11), width=9)
+        self._start_btn.pack(side="left", padx=4)
+        tk.Button(bf, text=L.t("timer_reset"),
+                  command=self._reset,
+                  bg=TH["warn"], fg="white",
+                  font=("Consolas", 11), width=9).pack(side="left", padx=4)
+
     def _start(self):
-        if self._running: self._running=False; self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
+        if self._running:
+            self._running = False
+            self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
         else:
-            try: self._duration=int(float(self._dur_e.get())*3600)
-            except: self._duration=0
-            self._running=True; self._elapsed_start=datetime.datetime.utcnow()
-            if self._duration>0: self._end_time=self._elapsed_start+datetime.timedelta(seconds=self._duration)
-            self._start_btn.config(text=L.t("timer_stop"),bg=TH["err"])
+            try:
+                h = int(self._h_e.get() or 0)
+                m = int(self._m_e.get() or 0)
+                self._duration = h * 3600 + m * 60
+            except Exception:
+                self._duration = 0
+            self._alerted = set()
+            self._running = True
+            self._elapsed_start = datetime.datetime.utcnow()
+            if self._duration > 0:
+                self._end_time = self._elapsed_start + datetime.timedelta(seconds=self._duration)
+            else:
+                self._end_time = None
+            self._start_btn.config(text=L.t("timer_stop"), bg=TH["err"])
+
     def _reset(self):
-        self._running=False; self._elapsed_secs=0; self._end_time=None; self._elapsed_start=None
-        self._time_lbl.config(text="00:00:00",fg=TH["gold"]); self._rem_lbl.config(text=""); self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
+        self._running = False
+        self._elapsed_secs = 0
+        self._end_time = None
+        self._elapsed_start = None
+        self._alerted = set()
+        self._time_lbl.config(text="00:00:00", fg=TH["gold"])
+        self._rem_lbl.config(text="")
+        self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
+
+    def _beep_alert(self, kind):
+        """Alertă sonoră diferențiată: 5min=1beep, 3min=2beeps, 1min=3beeps, end=5beeps."""
+        if not self._alert_v.get():
+            return
+        try:
+            import winsound
+            patterns = {
+                "5min":  [(880, 200)],
+                "3min":  [(880, 200), (880, 200)],
+                "1min":  [(1200, 200), (1200, 200), (1200, 200)],
+                "end":   [(1600, 300), (1600, 300), (1600, 300), (1600, 300), (1600, 500)],
+            }
+            for freq, dur in patterns.get(kind, []):
+                winsound.Beep(freq, dur)
+        except Exception:
+            beep("warning")
+
     def _tick(self):
         try:
-            if not self.winfo_exists(): return
-        except: return
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         if self._running and self._elapsed_start:
-            now=datetime.datetime.utcnow(); elapsed=int((now-self._elapsed_start).total_seconds())+self._elapsed_secs
-            h,rem=divmod(elapsed,3600); m,s=divmod(rem,60)
+            now = datetime.datetime.utcnow()
+            elapsed = int((now - self._elapsed_start).total_seconds()) + self._elapsed_secs
+            h, rem = divmod(elapsed, 3600)
+            m, s = divmod(rem, 60)
             try:
                 self._time_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
                 if self._end_time:
-                    remaining=int((self._end_time-now).total_seconds())
-                    if remaining<=0: self._running=False; self._time_lbl.config(fg=TH["err"]); self._rem_lbl.config(text="⏰ TIME UP!",fg=TH["err"]); beep("error")
+                    remaining = int((self._end_time - now).total_seconds())
+                    if remaining <= 0:
+                        if "end" not in self._alerted:
+                            self._alerted.add("end")
+                            self._beep_alert("end")
+                        self._running = False
+                        self._time_lbl.config(fg=TH["err"])
+                        self._rem_lbl.config(text="⏰ TIME UP!", fg=TH["err"])
+                        self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
                     else:
-                        rh,rr=divmod(remaining,3600); rm,rs=divmod(rr,60)
-                        self._rem_lbl.config(text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",fg=TH["warn"] if remaining<300 else TH["fg"])
-            except: return
-        try: self.after(1000,self._tick)
-        except: pass
+                        rh, rr = divmod(remaining, 3600)
+                        rm, rs = divmod(rr, 60)
+                        # Culoare avertizare
+                        if remaining <= 60:
+                            col = TH["err"]
+                        elif remaining <= 180:
+                            col = TH["warn"]
+                        elif remaining <= 300:
+                            col = "#FF9800"
+                        else:
+                            col = TH["fg"]
+                        self._rem_lbl.config(
+                            text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
+                            fg=col)
+                        # Avertizări sonore
+                        if remaining <= 60 and "1min" not in self._alerted:
+                            self._alerted.add("1min")
+                            self._beep_alert("1min")
+                        elif remaining <= 180 and "3min" not in self._alerted:
+                            self._alerted.add("3min")
+                            self._beep_alert("3min")
+                        elif remaining <= 300 and "5min" not in self._alerted:
+                            self._alerted.add("5min")
+                            self._beep_alert("5min")
+            except Exception:
+                return
+        try:
+            self.after(1000, self._tick)
+        except Exception:
+            pass
 
 class StatsWindow(tk.Toplevel):
     def __init__(self,parent,log_data,rules,cfg):
@@ -1858,7 +1985,7 @@ class FirstRunDialog(tk.Toplevel):
         super().__init__(parent)
         self.cfg = cfg
         self.result = None
-        self.title("YO Log PRO v17.0 — Configurare initiala / First Setup")
+        self.title("YO Log PRO v17.1 — Configurare initiala / First Setup")
         self.geometry("520x640")
         self.configure(bg=TH["bg"])
         self.resizable(False, False)
@@ -1880,10 +2007,10 @@ class FirstRunDialog(tk.Toplevel):
         # ── Banner ──
         banner = tk.Frame(self, bg=TH["header_bg"], pady=12)
         banner.pack(fill="x")
-        tk.Label(banner, text="📻  YO Log PRO v17.0",
+        tk.Label(banner, text="📻  YO Log PRO v17.1",
                  bg=TH["header_bg"], fg=TH["gold"],
                  font=("Consolas",16,"bold")).pack()
-        tk.Label(banner, text="CAT Edition — Amateur Radio Logger",
+        tk.Label(banner, text="Full Edition — Amateur Radio Logger",
                  bg=TH["header_bg"], fg=TH["cyan"],
                  font=("Consolas",10)).pack()
         tk.Label(banner, text="Developed by Ardei Constantin-Catalin (YO8ACR)",
@@ -2105,15 +2232,16 @@ class LogEditorWindow(tk.Toplevel):
         self._tree.bind("<Button-3>",  self._ctx_menu)
 
         # ─ Edit Form ─
-        ef = tk.LabelFrame(self, text=" ✏ Editare QSO ",
+        ef = tk.LabelFrame(self, text=" ✏ Editare QSO — dublu-click pe rând sau completează mai jos și apasă Salvează ",
                            bg=TH["bg"], fg=TH["gold"],
-                           font=("Consolas", 10, "bold"),
-                           pady=6, padx=8)
+                           font=("Consolas", 9, "bold"),
+                           pady=8, padx=8)
         ef.pack(fill="x", padx=8, pady=(0,6))
 
-        eo = {"bg": TH["entry_bg"], "fg": TH["fg"],
-              "font": ("Consolas", 10), "insertbackground": TH["fg"],
-              "justify": "center", "width": 11}
+        eo = {"bg": TH["entry_bg"], "fg": TH["gold"],
+              "font": ("Consolas", 11), "insertbackground": TH["fg"],
+              "justify": "center", "width": 11,
+              "relief": "solid", "bd": 1}
         lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 9)}
 
         self._ent = {}
@@ -2459,7 +2587,7 @@ class LogEditorWindow(tk.Toplevel):
     def _open_ro(call):
         if call:
             webbrowser.open(
-                f"https://radioamator.ro/callbook/?call={quote_plus(call.upper())}")
+                f"https://www.radioamator.ro/call-book/yocall.php?call={call.upper()}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2469,7 +2597,7 @@ class LogEditorWindow(tk.Toplevel):
 class CallbookDialog(tk.Toplevel):
     """Dialog căutare callbook: radioamator.ro (scraping) + QRZ.com web."""
 
-    RADIOAMATOR_URL = "https://radioamator.ro/callbook/?call={}"
+    RADIOAMATOR_URL = "https://www.radioamator.ro/call-book/yocall.php?call={}"
     QRZ_URL         = "https://www.qrz.com/db/{}"
 
     def __init__(self, parent, call="", on_fill=None):
@@ -2553,14 +2681,31 @@ class CallbookDialog(tk.Toplevel):
             val.pack(side="left")
             self._info_labels[key] = val
 
-        # Raw HTML viewer
-        tk.Label(rf, text="Răspuns brut / sursă:", bg=TH["bg"],
-                 fg=TH["fg"], font=("Consolas", 8)).pack(anchor="w")
-        self._raw_box = scrolledtext.ScrolledText(
-            rf, height=7, bg=TH["entry_bg"], fg=TH["ok"],
-            font=("Consolas", 8), state="disabled",
-            insertbackground=TH["fg"])
-        self._raw_box.pack(fill="both", expand=True)
+        # Vizualizator pagină web
+        web_hdr = tk.Frame(rf, bg=TH["bg"])
+        web_hdr.pack(fill="x")
+        tk.Label(web_hdr, text="Previzualizare pagină web:", bg=TH["bg"],
+                 fg=TH["fg"], font=("Consolas", 8)).pack(side="left")
+        tk.Button(web_hdr, text="↺ Reîncarcă pagina",
+                  command=self._reload_webview,
+                  bg=TH["btn_bg"], fg="white",
+                  font=("Consolas", 8), width=16).pack(side="right")
+
+        # Încearcă tkhtmlview pentru randare HTML
+        self._html_widget = None
+        try:
+            from tkhtmlview import HTMLScrolledText
+            self._html_widget = HTMLScrolledText(rf, height=9,
+                html="<p style='color:gray'>Caută un indicativ...</p>")
+            self._html_widget.pack(fill="both", expand=True)
+        except ImportError:
+            # Fallback: ScrolledText cu text plain
+            self._raw_box = scrolledtext.ScrolledText(
+                rf, height=9, bg=TH["entry_bg"], fg=TH["ok"],
+                font=("Consolas", 8), state="disabled",
+                insertbackground=TH["fg"])
+            self._raw_box.pack(fill="both", expand=True)
+            self._html_widget = None
 
         # ─ Buttons ─
         bf = tk.Frame(self, bg=TH["bg"], pady=6)
@@ -2603,8 +2748,8 @@ class CallbookDialog(tk.Toplevel):
             self.after(0, lambda: self._show_error(str(e)))
 
     def _fetch_radioamator(self, call):
-        """Scraping radioamator.ro/callbook"""
-        url = self.RADIOAMATOR_URL.format(quote_plus(call))
+        """Scraping www.radioamator.ro/call-book/yocall.php"""
+        url = self.RADIOAMATOR_URL.format(call.upper())
         req = Request(url, headers={
             "User-Agent": "YOLogPROv171/callbook (+https://github.com)",
             "Accept": "text/html",
@@ -2713,12 +2858,39 @@ class CallbookDialog(tk.Toplevel):
         return data, raw_short
 
     # ── Display ────────────────────────────────────────────
+    def _reload_webview(self):
+        """Reîncarcă pagina web în previzualizator."""
+        call = self._call_e.get().strip().upper()
+        if not call: return
+        src = self._src_v.get()
+        if src == "radioamator.ro":
+            url = self.RADIOAMATOR_URL.format(call)
+        else:
+            url = self.QRZ_URL.format(call)
+        self._load_url_in_widget(url)
+
+    def _load_url_in_widget(self, url):
+        """Încarcă URL în widget-ul de previzualizare."""
+        def _fetch():
+            try:
+                req = Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "text/html",
+                })
+                resp = urlopen(req, timeout=8)
+                html = resp.read().decode("utf-8", errors="ignore")
+                self.after(0, lambda: self._set_webview(html, url))
+            except Exception as e:
+                self.after(0, lambda: self._set_webview(
+                    f"<p style='color:red'>Eroare: {e}</p>", url))
+        threading.Thread(target=_fetch, daemon=True).start()
+
     def _show_result(self, data, raw):
         self._set_loading(False)
         self._result = data
 
         if data.get("_not_found"):
-            self._set_raw(f"⚠ Indicativul {data.get('call','')} nu a fost găsit în baza de date.")
+            self._set_webview("<p style='color:orange'>⚠ Indicativul " + data.get("call","") + " nu a fost găsit în baza de date.</p>", "")
             for lbl in self._info_labels.values():
                 lbl.config(text="—")
             return
@@ -2741,11 +2913,21 @@ class CallbookDialog(tk.Toplevel):
             if country != "Unknown" and self._info_labels.get("dxcc"):
                 self._info_labels["dxcc"].config(text=country)
 
-        self._set_raw(raw)
+        # Încarcă pagina web în previzualizator
+        call = data.get("call","")
+        src = self._src_v.get()
+        if call:
+            if src == "radioamator.ro":
+                url = self.RADIOAMATOR_URL.format(call)
+            else:
+                url = self.QRZ_URL.format(call)
+            self._load_url_in_widget(url)
+        else:
+            self._set_webview("<pre>" + raw[:3000] + "</pre>", "")
 
     def _show_error(self, msg):
         self._set_loading(False)
-        self._set_raw("\u26a0 Eroare: " + msg + "\n\nVerificați conexiunea la internet.")
+        self._set_webview("<p style='color:red'>⚠ Eroare: " + msg + "<br><br>Verificați conexiunea la internet.</p>", "")
 
     def _set_loading(self, state):
         try:
@@ -2758,14 +2940,30 @@ class CallbookDialog(tk.Toplevel):
             lbl.config(text="—")
         self._set_raw("")
 
-    def _set_raw(self, text):
+    def _set_webview(self, html_or_text, url=""):
+        """Afișează HTML în widget-ul de previzualizare."""
         try:
-            self._raw_box.config(state="normal")
-            self._raw_box.delete("1.0", "end")
-            self._raw_box.insert("end", text)
-            self._raw_box.config(state="disabled")
+            if self._html_widget is not None:
+                # tkhtmlview disponibil
+                self._html_widget.set_html(html_or_text)
+            else:
+                # Fallback text plain
+                import re as _re
+                text = _re.sub(r'<[^>]+>', ' ', html_or_text)
+                text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+                text = _re.sub(r'\s+', ' ', text).strip()
+                self._raw_box.config(state="normal")
+                self._raw_box.delete("1.0", "end")
+                if url:
+                    self._raw_box.insert("end", f"URL: {url}\n\n")
+                self._raw_box.insert("end", text[:4000])
+                self._raw_box.config(state="disabled")
         except Exception:
             pass
+
+    def _set_raw(self, text):
+        """Compatibilitate: redirecționează spre _set_webview."""
+        self._set_webview(text)
 
     # ── Actions ────────────────────────────────────────────
     def _use_loc(self):
@@ -3121,23 +3319,36 @@ class DXClusterWindow(tk.Toplevel):
         self._queue.append(("status", "● Deconectat"))
 
     def _parse_spot(self, line):
-        """Parsează o linie DX de Cluster: DX de YO8ACR: 14200.0  KP4RV  SSB"""
+        """Parsează linii DX Cluster în multiple formate standard.
+
+        Format principal (AR-Cluster/CC Cluster):
+          DX de YO8ACR-6:  14200.0  KP4RV          <comment>
+        Format alternativ (DX Spider):
+          DX de YO8ACR:14200.0 KP4RV comment
+        Format vechi:
+          DXC  14200.0  KP4RV  <comment>
+        """
+        line = line.strip()
+        spotter = ""; freq_s = ""; dx_call = ""; comment = ""
+
+        # Format principal: DX de SPOTTER-N:  FREQ  DX_CALL  COMMENT
         m = re.match(
-            r'DX\s+de\s+(\S+)\s*[:-]\s*(\S+)\s+(\S+)\s*(.*)',
+            r'DX\s+de\s+(\S+?)\s*:\s*(\d[\d.]+)\s+(\S+)\s*(.*)',
             line, re.IGNORECASE)
-        if not m:
-            # format alternativ: DXC  14200.0  KP4RV  <comment>
+        if m:
+            spotter  = m.group(1)
+            freq_s   = m.group(2)
+            dx_call  = m.group(3)
+            comment  = m.group(4).strip()
+        else:
+            # Format vechi/alternativ
             m2 = re.match(r'DX\s+(\d[\d.]+)\s+(\w+)\s*(.*)', line, re.IGNORECASE)
             if m2:
-                freq_s, dx_call, comment = m2.group(1), m2.group(2), m2.group(3)
-                spotter = ""
+                freq_s   = m2.group(1)
+                dx_call  = m2.group(2)
+                comment  = m2.group(3).strip()
             else:
                 return None
-        else:
-            spotter = m.group(1)
-            freq_s = m.group(2) if not m.group(2).isalpha() else m.group(3)
-            dx_call = m.group(3) if not m.group(2).isalpha() else m.group(2)
-            comment = m.group(4)
         try:
             freq_khz = float(re.sub(r'[^0-9.]', '', freq_s))
         except Exception:
@@ -3921,9 +4132,24 @@ class App(tk.Tk):
         for idx,(_,k) in enumerate(items): self.tree.move(k,"",idx)
 
     def _build_btns(self):
-        bb=tk.Frame(self,bg=TH["bg"],pady=6); bb.pack(fill="x",padx=10)
-        for txt,cmd,col in [(L.t("settings"),self._settings,TH["warn"]),(L.t("contests"),self._mgr,"#E91E63"),("📡 CAT",self._cat_dlg,"#1a5276"),("📝 Log Nou",self._new_log_dlg,"#2e7d32"),("🎨 Teme",self._theme_dlg,"#6a1b9a"),(L.t("stats"),self._stats,"#3F51B5"),(L.t("validate"),self._validate,TH["ok"]),(L.t("export"),self._export_dlg,"#9C27B0"),(L.t("import_log"),self._import_menu,"#FF5722"),(L.t("undo"),self._undo,"#795548"),(L.t("backup"),self._bak,"#607D8B"),(L.t("search"),self._search_dlg,"#00796B"),(L.t("timer"),self._timer_dlg,"#004D40"),("📝 Log Editor",self._open_log_editor,"#1B5E20"),("🌐 Callbook",self._open_callbook,"#1a237e")]:
-            tk.Button(bb,text=txt,command=cmd,bg=col,fg="white",font=("Consolas",10),width=11).pack(side="left",padx=2)
+        # Rândul 1 — butoane principale
+        bb1=tk.Frame(self,bg=TH["bg"],pady=2); bb1.pack(fill="x",padx=6)
+        row1=[(L.t("settings"),self._settings,TH["warn"]),(L.t("contests"),self._mgr,"#E91E63"),
+              ("📡 CAT",self._cat_dlg,"#1a5276"),("📝 Log Nou",self._new_log_dlg,"#2e7d32"),
+              ("🎨 Teme",self._theme_dlg,"#6a1b9a"),(L.t("stats"),self._stats,"#3F51B5"),
+              (L.t("validate"),self._validate,TH["ok"]),(L.t("export"),self._export_dlg,"#9C27B0")]
+        for txt,cmd,col in row1:
+            tk.Button(bb1,text=txt,command=cmd,bg=col,fg="white",
+                      font=("Consolas",9),width=10).pack(side="left",padx=2)
+        # Rândul 2 — utilitare + v17.1
+        bb2=tk.Frame(self,bg=TH["bg"],pady=2); bb2.pack(fill="x",padx=6)
+        row2=[(L.t("import_log"),self._import_menu,"#FF5722"),(L.t("undo"),self._undo,"#795548"),
+              (L.t("backup"),self._bak,"#607D8B"),(L.t("search"),self._search_dlg,"#00796B"),
+              (L.t("timer"),self._timer_dlg,"#004D40"),("📝 Log Editor",self._open_log_editor,"#1B5E20"),
+              ("🌐 Callbook",self._open_callbook,"#1a237e")]
+        for txt,cmd,col in row2:
+            tk.Button(bb2,text=txt,command=cmd,bg=col,fg="white",
+                      font=("Consolas",9),width=10).pack(side="left",padx=2)
 
     def _refresh(self):
         if not self.tree: return
@@ -4181,11 +4407,38 @@ class App(tk.Tk):
         if d.result: self.contests=d.result; DM.save("contests.json",self.contests); self._rebuild()
 
     def _about(self):
-        d=tk.Toplevel(self); d.title(L.t("about")); d.geometry("460x280"); d.configure(bg=TH["bg"]); d.transient(self)
-        tk.Label(d,text="📻 YO Log PRO v17.0 — CAT Edition",bg=TH["bg"],fg=TH["accent"],font=("Consolas",16,"bold")).pack(pady=12)
-        tk.Label(d,text=L.t("credits"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(pady=8)
-        tk.Label(d,text=L.t("usage"),bg=TH["bg"],fg=TH["fg"],font=("Consolas",9)).pack(pady=6)
-        tk.Button(d,text=L.t("close"),command=d.destroy,bg=TH["accent"],fg="white",width=12).pack(pady=10); center_dialog(d,self)
+        d=tk.Toplevel(self); d.title(L.t("about")); d.geometry("520x360")
+        d.configure(bg=TH["bg"]); d.transient(self); d.resizable(False,False)
+        center_dialog(d,self)
+        tk.Label(d,text="📻 YO Log PRO v17.1 — Full Edition",
+                 bg=TH["bg"],fg=TH["accent"],font=("Consolas",15,"bold")).pack(pady=(16,4))
+        tk.Label(d,text="Professional Multi-Contest Amateur Radio Logger",
+                 bg=TH["bg"],fg=TH["fg"],font=("Consolas",10)).pack()
+        tk.Frame(d,bg=TH["accent"],height=2).pack(fill="x",padx=30,pady=8)
+        info=[
+            ("Dezvoltat de:","Ardei Constantin-Cătălin (YO8ACR)"),
+            ("Email:","yo8acr@gmail.com"),
+            ("Repo:","https://github.com/acc1311/YOLogPRO_v17.1"),
+            ("",""),
+            ("Versiune:","v17.1 — Full Edition (2025)"),
+            ("Python:","3.6+ / Tkinter GUI"),
+            ("Platforme:","Windows 7/8/10/11, Linux, macOS"),
+        ]
+        for lbl,val in info:
+            if not lbl and not val:
+                tk.Frame(d,bg=TH["bg"],height=4).pack(); continue
+            rf=tk.Frame(d,bg=TH["bg"]); rf.pack(anchor="w",padx=40,pady=1)
+            tk.Label(rf,text=lbl,bg=TH["bg"],fg=TH["fg"],
+                     font=("Consolas",9),width=14,anchor="e").pack(side="left")
+            tk.Label(rf,text=val,bg=TH["bg"],fg=TH["gold"],
+                     font=("Consolas",9),anchor="w").pack(side="left",padx=6)
+        tk.Frame(d,bg=TH["accent"],height=2).pack(fill="x",padx=30,pady=8)
+        shortcuts="Ctrl+F=Caută  Ctrl+Z=Undo  Ctrl+S=Save  F2=Bandă+  F3=Mod+  Enter=Log"
+        tk.Label(d,text=shortcuts,bg=TH["bg"],fg=TH["fg"],
+                 font=("Consolas",8)).pack(pady=(0,6))
+        tk.Button(d,text=L.t("close"),command=d.destroy,
+                  bg=TH["ok"],fg="white",font=("Consolas",11),width=12).pack(pady=8)
+
 
     def _settings(self):
         d=tk.Toplevel(self); d.title(L.t("settings")); d.geometry("420x560"); d.configure(bg=TH["bg"]); d.transient(self)
