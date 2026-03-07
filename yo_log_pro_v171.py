@@ -18,21 +18,15 @@ CHANGELOG v17.1:
 - ADDED: Full CAT radio control (frecventa bidirectionala, mod bidirectional)
 - FIXED: Compatibilitate Windows 7 (ttk.Style, font fallback, encoding)
 - FIXED: Frequency, band, mode and RST persist between QSOs (only call and note clear)
+- FIXED: Callbook radioamator.ro URL corect (call-book/yocall.php)
+- FIXED: QRZ.com scraping îmbunătățit
+- FIXED: Timer cu opțiune minute
+- FIXED: Pagina Despre formatare corectă
+- FIXED: Bara de jos layout
 
 CHANGELOG v17.0:
 - FIXED: Frequency, band, mode and RST persist between QSOs (only call and note clear)
 - Keep all operating parameters until manually changed
-
-CHANGELOG v16.x:
-- ADDED: Cabrillo 2.0 export with configurable exchange dialog
-- ADDED: Exchange options: County/Grid/Serial/None for sent, Log/None for received
-- ADDED: Preview dialog before Cabrillo export
-- ADDED: Import Cabrillo 2.0 and 3.0 formats
-- ADDED: cabrillo_name field in contest editor
-- ADDED: exchange_format field per contest
-- ADDED: Email and Soapbox fields in settings
-- ADDED: Validation + auto-backup before export
-- ADDED: Save dialog for all exports
 """
 
 import os, sys, re, csv, copy, json, math, datetime, io, hashlib
@@ -192,11 +186,9 @@ class DXCC:
                 line = line.strip()
                 if not line or line.startswith('#'): continue
                 if not line.startswith(' ') and ':' in line:
-                    # Linie entitate: Romania: EU  28  274  E6  20.8 ...
                     parts = [p.strip() for p in line.split(':')]
                     if len(parts) >= 1: current_entity = parts[0].strip()
                 elif line.startswith(' ') and current_entity:
-                    # Linie prefixe
                     prefixes = [p.strip().rstrip(',;').lstrip('=*') for p in line.split(',')]
                     for pfx in prefixes:
                         if pfx and pfx.replace('/','').isalnum():
@@ -303,6 +295,7 @@ T = {
         "switch_conf":"Schimbați concursul?\nLogul curent va fi salvat.",
         "exch_sent_l":"Exchange TRIMIS:","exch_rcvd_l":"Exchange PRIMIT:",
         "cab2_config":"Configurare Cabrillo 2.0","cab2_export":"📤 Exportă",
+        "dur_min":"Minute:",
     },
     "en": {
         "app_title":"YO Log PRO v17.1","call":"Callsign","band":"Band","mode":"Mode",
@@ -372,6 +365,7 @@ T = {
         "switch_conf":"Switch contest?\nCurrent log will be saved.",
         "exch_sent_l":"Exchange SENT:","exch_rcvd_l":"Exchange RECEIVED:",
         "cab2_config":"Cabrillo 2.0 Configuration","cab2_export":"📤 Export",
+        "dur_min":"Minutes:",
     }
 }
 
@@ -456,7 +450,7 @@ DEFAULT_CONTESTS = {
 }
 
 DEFAULT_CFG = {
-    "call":"YO8ACR","loc":"KN37","jud":"NT","addr":"",
+    "call":"YO8ACR","loc":"KN37","jud":"NT","addr":"Târgu Neamț, Neamț, Romania",
     "cat":0,"fs":11,"contest":"simplu","county":"NT",
     "lang":"ro","manual_dt":False,"sounds":True,
     "op_name":"","power":"100","win_geo":"",
@@ -538,17 +532,14 @@ TH = dict(THEMES["Dark Blue (implicit)"])
 # Suportat: Yaesu CAT, Icom CI-V, Kenwood, Elecraft, Hamlib
 # ═══════════════════════════════════════════════════════════
 
-# Mapare mod CAT → mod logger
 YAESU_MODE_MAP  = {b'\x00':"LSB",b'\x01':"USB",b'\x02':"CW",b'\x03':"CW",b'\x04':"AM",b'\x08':"FM",b'\x0a':"DIGI",b'\x0c':"DIGI",b'\x0e':"FT8"}
 KENWOOD_MODE_MAP= {"LSB":"LSB","USB":"USB","CW":"CW","FM":"FM","AM":"AM","FSK":"RTTY","CWR":"CW","FSR":"RTTY"}
 ICOM_MODE_MAP   = {0x00:"LSB",0x01:"USB",0x02:"AM",0x03:"CW",0x04:"RTTY",0x05:"FM",0x06:"CW",0x07:"DIGI",0x08:"FT8",0x11:"FT8"}
 
-# Mapare mod logger → byte Yaesu
 YAESU_MODE_REV  = {"LSB":0x00,"USB":0x01,"CW":0x02,"AM":0x04,"FM":0x08,"SSB":0x01,"DIGI":0x0a,"RTTY":0x0a,"FT8":0x0e,"FT4":0x0e}
 ICOM_MODE_REV   = {"LSB":0x00,"USB":0x01,"AM":0x02,"CW":0x03,"RTTY":0x04,"FM":0x05,"DIGI":0x07,"FT8":0x08,"FT4":0x08,"SSB":0x01}
 KENWOOD_MODE_REV= {"LSB":"LSB","USB":"USB","SSB":"USB","CW":"CW","FM":"FM","AM":"AM","RTTY":"FSK","DIGI":"FSK","FT8":"FSK","FT4":"FSK"}
 
-# Baud-uri implicite per protocol
 CAT_BAUD_DEFAULTS = {
     "Yaesu CAT":38400, "Icom CI-V":19200,
     "Kenwood CAT":9600, "Elecraft CAT":38400, "Hamlib/rigctld":4532
@@ -561,20 +552,19 @@ class CATEngine:
     """Motor CAT bidirecțional — polling 2s, thread separat, safe pentru Tkinter."""
 
     def __init__(self):
-        self._ser    = None          # serial.Serial
-        self._sock   = None          # socket pentru Hamlib
+        self._ser    = None
+        self._sock   = None
         self._thread = None
         self._stop   = threading.Event()
         self._lock   = threading.Lock()
         self.connected   = False
         self.protocol    = "Manual (fără CAT)"
-        self.last_freq   = ""        # kHz string
-        self.last_mode   = ""        # SSB/CW/etc
+        self.last_freq   = ""
+        self.last_mode   = ""
         self.last_error  = ""
-        self.on_update   = None      # callback(freq_khz, mode)
-        self.civ_addr    = 0x94      # Icom CI-V address
+        self.on_update   = None
+        self.civ_addr    = 0x94
 
-    # ── Conectare ──────────────────────────────────────────
     def connect(self, cfg):
         self.disconnect()
         self.protocol = cfg.get("cat_protocol","Manual (fără CAT)")
@@ -631,7 +621,6 @@ class CATEngine:
             self.last_error = str(e)
             return False, f"Eroare Hamlib:\n{e}\n\nAsigură-te că rigctld rulează:\nrigctld -m MODEL -r PORT"
 
-    # ── Deconectare ────────────────────────────────────────
     def disconnect(self):
         self._stop.set()
         self.connected = False
@@ -648,7 +637,6 @@ class CATEngine:
         self.last_freq = ""
         self.last_mode = ""
 
-    # ── Poll loop (thread) ─────────────────────────────────
     def _poll_loop(self):
         while not self._stop.is_set():
             try:
@@ -662,9 +650,8 @@ class CATEngine:
                 self.last_error = str(e)
                 self.connected = False
                 break
-            self._stop.wait(2.0)   # poll la 2 secunde
+            self._stop.wait(2.0)
 
-    # ── Citire frecvență și mod ─────────────────────────────
     def _read_radio(self):
         if self.protocol == "Yaesu CAT":    return self._yaesu_get()
         if self.protocol == "Icom CI-V":    return self._icom_get()
@@ -673,8 +660,6 @@ class CATEngine:
         if self.protocol == "Hamlib/rigctld": return self._hamlib_get()
         return None, None
 
-    # ── YAESU CAT ──────────────────────────────────────────
-    # Comenzi 5-byte: CMD P1 P2 P3 P4
     def _yaesu_send(self, cmd, p1=0,p2=0,p3=0,p4=0):
         with self._lock:
             if not self._ser: return b""
@@ -684,10 +669,8 @@ class CATEngine:
             return self._ser.read(self._ser.in_waiting or 1)
 
     def _yaesu_get(self):
-        # FA — Read Frequency (5 byte reply BCD)
         raw = self._yaesu_send(0x03)
         if len(raw) >= 5:
-            # BCD decode: bytes 0-3 = 8 cifre BCD, byte 4 = mod
             bcd = ""
             for b in raw[:4]: bcd += f"{(b>>4)&0xF}{b&0xF}"
             try:
@@ -700,7 +683,6 @@ class CATEngine:
         return None, None
 
     def _yaesu_set_freq(self, khz):
-        """Trimite frecvență spre Yaesu (BCD encoding)"""
         with self._lock:
             if not self._ser: return False
             try:
@@ -709,20 +691,18 @@ class CATEngine:
                 b = []
                 for i in range(0, 8, 2):
                     b.append((int(hz_str[i])<<4) | int(hz_str[i+1]))
-                b.append(0x01)  # CMD = Set Frequency
+                b.append(0x01)
                 self._ser.write(bytes(b))
                 return True
             except: return False
 
     def _yaesu_set_mode(self, mode):
-        """Trimite mod spre Yaesu"""
         with self._lock:
             if not self._ser: return False
             mb = YAESU_MODE_REV.get(mode.upper(), 0x01)
             self._ser.write(bytes([mb, 0,0,0, 0x07]))
             return True
 
-    # ── ICOM CI-V ──────────────────────────────────────────
     def _icom_send(self, cmd, subcmd=None, data=b""):
         with self._lock:
             if not self._ser: return b""
@@ -750,8 +730,7 @@ class CATEngine:
         return hz
 
     def _icom_get(self):
-        resp = self._icom_send(0x03)   # Read operating frequency
-        # Find response frame: FE FE E0 addr 03 [5 bytes freq] FD
+        resp = self._icom_send(0x03)
         idx = resp.find(bytes([0xFE,0xFE,0xE0]))
         if idx >= 0:
             frame = resp[idx:]
@@ -759,7 +738,6 @@ class CATEngine:
                 freq_data = frame[5:10]
                 hz = self._icom_bcd_to_hz(freq_data)
                 khz = str(hz // 1000)
-                # Read mode
                 resp2 = self._icom_send(0x04)
                 mode = "SSB"
                 idx2 = resp2.find(bytes([0xFE,0xFE,0xE0]))
@@ -776,7 +754,6 @@ class CATEngine:
             try:
                 hz = int(float(khz) * 1000)
                 data = bytes([(hz//(10**(2*i)))%100 for i in range(5)])
-                # encode as BCD pairs
                 bcd = bytes([((hz//(10**(2*i+1)))%10 <<4)|((hz//(10**(2*i)))%10) for i in range(5)])
                 self._ser.write(bytes([0xFE,0xFE,self.civ_addr,0xE0,0x05])+bcd+bytes([0xFD]))
                 return True
@@ -789,7 +766,6 @@ class CATEngine:
             self._ser.write(bytes([0xFE,0xFE,self.civ_addr,0xE0,0x06,mb,0x00,0xFD]))
             return True
 
-    # ── KENWOOD CAT ────────────────────────────────────────
     def _kenwood_cmd(self, cmd):
         with self._lock:
             if not self._ser: return ""
@@ -806,8 +782,7 @@ class CATEngine:
             return resp.decode(errors="ignore")
 
     def _kenwood_get(self):
-        resp = self._kenwood_cmd("FA")   # FA = VFO-A frequency
-        # Response: FA00014200000;
+        resp = self._kenwood_cmd("FA")
         if resp.startswith("FA") and len(resp) >= 13:
             try:
                 hz = int(resp[2:13])
@@ -840,7 +815,6 @@ class CATEngine:
             self._ser.write(f"MD{mc};".encode())
             return True
 
-    # ── ELECRAFT CAT (similar Kenwood) ─────────────────────
     def _elecraft_get(self):
         resp = self._kenwood_cmd("FA")
         if resp.startswith("FA") and len(resp) >= 13:
@@ -857,7 +831,6 @@ class CATEngine:
             except: pass
         return None, None
 
-    # ── HAMLIB/rigctld ─────────────────────────────────────
     def _hamlib_cmd(self, cmd):
         try:
             if not self._sock: return ""
@@ -879,7 +852,7 @@ class CATEngine:
             return ""
 
     def _hamlib_get(self):
-        resp = self._hamlib_cmd("f")   # get frequency
+        resp = self._hamlib_cmd("f")
         freq_khz = None
         try:
             for line in resp.splitlines():
@@ -889,7 +862,7 @@ class CATEngine:
                     break
         except: pass
         mode = None
-        resp2 = self._hamlib_cmd("m")  # get mode
+        resp2 = self._hamlib_cmd("m")
         try:
             lines = [l.strip() for l in resp2.splitlines() if l.strip() and not l.startswith("RPRT")]
             if lines:
@@ -913,9 +886,7 @@ class CATEngine:
         resp = self._hamlib_cmd(f"M {hm} 0")
         return "RPRT 0" in resp or resp == ""
 
-    # ── API PUBLIC: set freq/mode spre radio ───────────────
     def set_freq(self, khz):
-        """Trimite frecvență spre radio. Returns True/False."""
         if not self.connected: return False
         try:
             if self.protocol == "Yaesu CAT":     return self._yaesu_set_freq(khz)
@@ -927,7 +898,6 @@ class CATEngine:
         return False
 
     def set_mode(self, mode):
-        """Trimite mod spre radio. Returns True/False."""
         if not self.connected: return False
         try:
             if self.protocol == "Yaesu CAT":     return self._yaesu_set_mode(mode)
@@ -938,7 +908,6 @@ class CATEngine:
         except: pass
         return False
 
-    # ── Utilitar: listare porturi COM ─────────────────────
     @staticmethod
     def list_ports():
         if not HAS_SERIAL: return []
@@ -947,7 +916,6 @@ class CATEngine:
         except: return []
 
 
-# Instanță globală
 CAT = CATEngine()
 
 class DM:
@@ -1247,8 +1215,11 @@ class ContestEditor(tk.Toplevel):
     def _parse_kv(text):
         result={}
         for line in text.strip().splitlines():
-            if "=" in line: k,_,v=line.partition("="); k=k.strip().upper();
-            if k: result[k]=v.strip()
+            if "=" in line:
+                k,_,v=line.partition("=")
+                k=k.strip().upper()
+                if k:
+                    result[k]=v.strip()
         return result
 
     def _save(self):
@@ -1361,42 +1332,100 @@ class SearchDialog(tk.Toplevel):
         for nr,qso in results: self.tree.insert("","end",values=(nr,qso.get("c"),qso.get("b"),qso.get("m"),qso.get("d"),qso.get("n")))
 
 class TimerDialog(tk.Toplevel):
+    """Timer cu opțiuni pentru ore ȘI minute."""
     def __init__(self,parent):
-        super().__init__(parent); self.title(L.t("timer_t")); self.geometry("300x220"); self.configure(bg=TH["bg"]); self.transient(parent)
-        self._running=False; self._end_time=None; self._duration=0; self._elapsed_start=None; self._elapsed_secs=0
-        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}; eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":("Consolas",11),"justify":"center","insertbackground":TH["fg"]}
-        tk.Label(self,text=L.t("dur_h"),**lo).pack(pady=(15,0)); self._dur_e=tk.Entry(self,width=10,**eo); self._dur_e.insert(0,"4"); self._dur_e.pack(pady=4)
-        self._time_lbl=tk.Label(self,text="00:00:00",bg=TH["bg"],fg=TH["gold"],font=("Consolas",28,"bold")); self._time_lbl.pack(pady=10)
-        self._rem_lbl=tk.Label(self,text="",**lo); self._rem_lbl.pack()
-        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=8)
-        self._start_btn=tk.Button(bf,text=L.t("timer_start"),command=self._start,bg=TH["ok"],fg="white",font=("Consolas",11),width=8); self._start_btn.pack(side="left",padx=4)
-        tk.Button(bf,text=L.t("timer_reset"),command=self._reset,bg=TH["warn"],fg="white",font=("Consolas",11),width=8).pack(side="left",padx=4)
-        self._tick(); center_dialog(self,parent)
+        super().__init__(parent)
+        self.title(L.t("timer_t"))
+        self.geometry("340x280")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self._running=False
+        self._end_time=None
+        self._duration=0
+        self._elapsed_start=None
+        self._elapsed_secs=0
+        
+        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}
+        eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":("Consolas",11),"justify":"center","insertbackground":TH["fg"],"width":8}
+        
+        # Frame pentru durată
+        df = tk.Frame(self, bg=TH["bg"])
+        df.pack(pady=(15,5))
+        
+        tk.Label(df, text=L.t("dur_h"), **lo).pack(side="left", padx=5)
+        self._dur_e = tk.Entry(df, **eo)
+        self._dur_e.insert(0, "0")
+        self._dur_e.pack(side="left", padx=2)
+        
+        tk.Label(df, text=L.t("dur_min"), **lo).pack(side="left", padx=(15,5))
+        self._min_e = tk.Entry(df, **eo)
+        self._min_e.insert(0, "30")
+        self._min_e.pack(side="left", padx=2)
+        
+        self._time_lbl=tk.Label(self,text="00:00:00",bg=TH["bg"],fg=TH["gold"],font=("Consolas",32,"bold"))
+        self._time_lbl.pack(pady=10)
+        
+        self._rem_lbl=tk.Label(self,text="",**lo)
+        self._rem_lbl.pack()
+        
+        bf=tk.Frame(self,bg=TH["bg"])
+        bf.pack(pady=12)
+        
+        self._start_btn=tk.Button(bf,text=L.t("timer_start"),command=self._start,bg=TH["ok"],fg="white",font=("Consolas",11),width=10)
+        self._start_btn.pack(side="left",padx=6)
+        
+        tk.Button(bf,text=L.t("timer_reset"),command=self._reset,bg=TH["warn"],fg="white",font=("Consolas",11),width=10).pack(side="left",padx=6)
+        
+        self._tick()
+        center_dialog(self,parent)
+        
     def _start(self):
-        if self._running: self._running=False; self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
+        if self._running:
+            self._running=False
+            self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
         else:
-            try: self._duration=int(float(self._dur_e.get())*3600)
-            except: self._duration=0
-            self._running=True; self._elapsed_start=datetime.datetime.utcnow()
-            if self._duration>0: self._end_time=self._elapsed_start+datetime.timedelta(seconds=self._duration)
+            try:
+                hours = int(self._dur_e.get() or "0")
+                mins = int(self._min_e.get() or "0")
+                self._duration = hours * 3600 + mins * 60
+            except:
+                self._duration = 0
+            self._running=True
+            self._elapsed_start=datetime.datetime.utcnow()
+            if self._duration>0:
+                self._end_time=self._elapsed_start+datetime.timedelta(seconds=self._duration)
             self._start_btn.config(text=L.t("timer_stop"),bg=TH["err"])
+            
     def _reset(self):
-        self._running=False; self._elapsed_secs=0; self._end_time=None; self._elapsed_start=None
-        self._time_lbl.config(text="00:00:00",fg=TH["gold"]); self._rem_lbl.config(text=""); self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
+        self._running=False
+        self._elapsed_secs=0
+        self._end_time=None
+        self._elapsed_start=None
+        self._time_lbl.config(text="00:00:00",fg=TH["gold"])
+        self._rem_lbl.config(text="")
+        self._start_btn.config(text=L.t("timer_start"),bg=TH["ok"])
+        
     def _tick(self):
         try:
             if not self.winfo_exists(): return
         except: return
         if self._running and self._elapsed_start:
-            now=datetime.datetime.utcnow(); elapsed=int((now-self._elapsed_start).total_seconds())+self._elapsed_secs
-            h,rem=divmod(elapsed,3600); m,s=divmod(rem,60)
+            now=datetime.datetime.utcnow()
+            elapsed=int((now-self._elapsed_start).total_seconds())+self._elapsed_secs
+            h,rem=divmod(elapsed,3600)
+            m,s=divmod(rem,60)
             try:
                 self._time_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
                 if self._end_time:
                     remaining=int((self._end_time-now).total_seconds())
-                    if remaining<=0: self._running=False; self._time_lbl.config(fg=TH["err"]); self._rem_lbl.config(text="⏰ TIME UP!",fg=TH["err"]); beep("error")
+                    if remaining<=0:
+                        self._running=False
+                        self._time_lbl.config(fg=TH["err"])
+                        self._rem_lbl.config(text="⏰ TIME UP!",fg=TH["err"])
+                        beep("error")
                     else:
-                        rh,rr=divmod(remaining,3600); rm,rs=divmod(rr,60)
+                        rh,rr=divmod(remaining,3600)
+                        rm,rs=divmod(rr,60)
                         self._rem_lbl.config(text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",fg=TH["warn"] if remaining<300 else TH["fg"])
             except: return
         try: self.after(1000,self._tick)
@@ -1404,12 +1433,25 @@ class TimerDialog(tk.Toplevel):
 
 class StatsWindow(tk.Toplevel):
     def __init__(self,parent,log_data,rules,cfg):
-        super().__init__(parent); self.title(L.t("stats")); self.geometry("560x520"); self.configure(bg=TH["bg"]); self.transient(parent); center_dialog(self,parent)
-        txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="word"); txt.pack(fill="both",expand=True,padx=10,pady=10)
-        txt.tag_configure("h",foreground=TH["gold"],font=("Consolas",11,"bold")); txt.tag_configure("ok",foreground=TH["ok"]); txt.tag_configure("warn",foreground=TH["warn"])
+        super().__init__(parent)
+        self.title(L.t("stats"))
+        self.geometry("560x520")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        center_dialog(self,parent)
+        
+        txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="word")
+        txt.pack(fill="both",expand=True,padx=10,pady=10)
+        txt.tag_configure("h",foreground=TH["gold"],font=("Consolas",11,"bold"))
+        txt.tag_configure("ok",foreground=TH["ok"])
+        txt.tag_configure("warn",foreground=TH["warn"])
+        
         def w(t,tag=None): txt.insert("end",t,tag)
+        
         nm=rules.get("name_"+L.g(),rules.get("name_ro","?")) if rules else "?"
-        w(f"📊 {L.t('stats')} — {nm}\n\n","h"); w(f"Total QSO: {len(log_data)}\nUnice: {len({q.get('c','').upper() for q in log_data})}\n")
+        w(f"📊 {L.t('stats')} — {nm}\n\n","h")
+        w(f"Total QSO: {len(log_data)}\nUnice: {len({q.get('c','').upper() for q in log_data})}\n")
+        
         if log_data:
             try:
                 dts=sorted([datetime.datetime.strptime(q.get("d","")+" "+q.get("t",""),"%Y-%m-%d %H:%M") for q in log_data if q.get("d") and q.get("t")])
@@ -1417,53 +1459,100 @@ class StatsWindow(tk.Toplevel):
                     span_h=(dts[-1]-dts[0]).total_seconds()/3600
                     w(f"Duration: {span_h:.1f}h  Rate: {len(log_data)/span_h:.1f} QSO/h\n")
             except: pass
+                
         w("\n─── Benzi ───\n","h")
         bc=Counter(q.get("b","?") for q in log_data)
         for b in BANDS_ALL:
             if b in bc: w(f"  {b:<6} QSO:{bc[b]:<5} Pts:{sum(Score.qso(q,rules,cfg) for q in log_data if q.get('b')==b)}\n")
+                
         w("\n─── Scor ───\n","h")
         if rules and rules.get("scoring_mode","none")!="none":
-            qp,mult,tot=Score.total(log_data,rules,cfg); w(f"  {qp}×{mult}={tot}\n","ok")
-        else: w("  (no scoring)\n","warn")
-        txt.config(state="disabled"); tk.Button(self,text=L.t("close"),command=self.destroy,bg=TH["btn_bg"],fg="white").pack(pady=6)
+            qp,mult,tot=Score.total(log_data,rules,cfg)
+            w(f"  {qp}×{mult}={tot}\n","ok")
+        else:
+            w("  (no scoring)\n","warn")
+            
+        txt.config(state="disabled")
+        tk.Button(self,text=L.t("close"),command=self.destroy,bg=TH["btn_bg"],fg="white").pack(pady=6)
 
 class Cab2ConfigDialog(tk.Toplevel):
     def __init__(self,parent,cfg):
-        super().__init__(parent); self.result=None; self.cfg=cfg; self.title(L.t("cab2_config")); self.geometry("420x250"); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
-        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}; jud=cfg.get("county",cfg.get("jud","NT")); loc=cfg.get("loc","KN37")
+        super().__init__(parent)
+        self.result=None
+        self.cfg=cfg
+        self.title(L.t("cab2_config"))
+        self.geometry("420x250")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self.grab_set()
+        
+        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}
+        jud=cfg.get("county",cfg.get("jud","NT"))
+        loc=cfg.get("loc","KN37")
+        
         tk.Label(self,text=L.t("exch_sent_l"),**lo).pack(anchor="w",padx=15,pady=(15,0))
-        sent_opts=EXCH_SENT_OPTIONS.get(L.g(),EXCH_SENT_OPTIONS["ro"]); self._sent_labels={}; self._sent_values=[]
+        sent_opts=EXCH_SENT_OPTIONS.get(L.g(),EXCH_SENT_OPTIONS["ro"])
+        self._sent_labels={}
+        self._sent_values=[]
         for k,lbl in sent_opts.items():
-            display=lbl.format(jud=jud,loc=loc); self._sent_labels[display]=k; self._sent_values.append(display)
-        saved=cfg.get("cab2_exch_sent","none"); default_sent=self._sent_values[-1]
+            display=lbl.format(jud=jud,loc=loc)
+            self._sent_labels[display]=k
+            self._sent_values.append(display)
+        saved=cfg.get("cab2_exch_sent","none")
+        default_sent=self._sent_values[-1]
         for d,k in self._sent_labels.items():
             if k==saved: default_sent=d; break
-        self._sent_v=tk.StringVar(value=default_sent); ttk.Combobox(self,textvariable=self._sent_v,values=self._sent_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
+        self._sent_v=tk.StringVar(value=default_sent)
+        ttk.Combobox(self,textvariable=self._sent_v,values=self._sent_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
+        
         tk.Label(self,text=L.t("exch_rcvd_l"),**lo).pack(anchor="w",padx=15,pady=(10,0))
-        rcvd_opts=EXCH_RCVD_OPTIONS.get(L.g(),EXCH_RCVD_OPTIONS["ro"]); self._rcvd_labels={}; self._rcvd_values=[]
-        for k,lbl in rcvd_opts.items(): self._rcvd_labels[lbl]=k; self._rcvd_values.append(lbl)
-        saved_r=cfg.get("cab2_exch_rcvd","log"); default_rcvd=self._rcvd_values[0]
+        rcvd_opts=EXCH_RCVD_OPTIONS.get(L.g(),EXCH_RCVD_OPTIONS["ro"])
+        self._rcvd_labels={}
+        self._rcvd_values=[]
+        for k,lbl in rcvd_opts.items():
+            self._rcvd_labels[lbl]=k
+            self._rcvd_values.append(lbl)
+        saved_r=cfg.get("cab2_exch_rcvd","log")
+        default_rcvd=self._rcvd_values[0]
         for d,k in self._rcvd_labels.items():
             if k==saved_r: default_rcvd=d; break
-        self._rcvd_v=tk.StringVar(value=default_rcvd); ttk.Combobox(self,textvariable=self._rcvd_v,values=self._rcvd_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
-        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=18)
+        self._rcvd_v=tk.StringVar(value=default_rcvd)
+        ttk.Combobox(self,textvariable=self._rcvd_v,values=self._rcvd_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
+        
+        bf=tk.Frame(self,bg=TH["bg"])
+        bf.pack(pady=18)
         tk.Button(bf,text=L.t("cab2_export"),command=self._ok,bg=TH["ok"],fg="white",font=("Consolas",12,"bold"),width=14).pack(side="left",padx=8)
         tk.Button(bf,text=L.t("cancel"),command=self.destroy,bg=TH["btn_bg"],fg="white",font=("Consolas",12),width=10).pack(side="left",padx=8)
         center_dialog(self,parent)
+        
     def _ok(self):
-        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log")}; self.destroy()
+        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log")}
+        self.destroy()
 
 class PreviewDialog(tk.Toplevel):
     def __init__(self,parent,title_str,content,save_callback):
-        super().__init__(parent); self.title(title_str); self.geometry("750x550"); self.configure(bg=TH["bg"]); self.transient(parent)
-        self._save_cb=save_callback; self._content=content
-        txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="none"); txt.pack(fill="both",expand=True,padx=10,pady=10)
-        txt.insert("1.0",content); txt.config(state="disabled")
-        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=8)
+        super().__init__(parent)
+        self.title(title_str)
+        self.geometry("750x550")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self._save_cb=save_callback
+        self._content=content
+        
+        txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="none")
+        txt.pack(fill="both",expand=True,padx=10,pady=10)
+        txt.insert("1.0",content)
+        txt.config(state="disabled")
+        
+        bf=tk.Frame(self,bg=TH["bg"])
+        bf.pack(pady=8)
         tk.Button(bf,text=L.t("save"),command=self._on_save,bg=TH["ok"],fg="white",font=("Consolas",12,"bold"),width=12).pack(side="left",padx=8)
         tk.Button(bf,text=L.t("cancel"),command=self.destroy,bg=TH["btn_bg"],fg="white",font=("Consolas",12),width=12).pack(side="left",padx=8)
         center_dialog(self,parent)
-    def _on_save(self): self._save_cb(self._content); self.destroy()
+        
+    def _on_save(self):
+        self._save_cb(self._content)
+        self.destroy()
 
 
 class CATSettingsDialog(tk.Toplevel):
@@ -1489,12 +1578,10 @@ class CATSettingsDialog(tk.Toplevel):
         eo  = {"bg":TH["entry_bg"], "fg":TH["fg"], "font":("Consolas",11),
                "insertbackground":TH["fg"]}
 
-        # ── Titlu ──
         tk.Label(self, text="  CAT — Computer Aided Transceiver",
                  bg=TH["bg"], fg=TH["gold"],
                  font=("Consolas",13,"bold")).pack(fill="x", padx=0, pady=(10,4))
 
-        # ── Status + Freq/Mod live ──
         sf = tk.Frame(self, bg=TH["entry_bg"], bd=1, relief="solid")
         sf.pack(fill="x", padx=16, pady=4)
         row0 = tk.Frame(sf, bg=TH["entry_bg"]); row0.pack(fill="x", padx=8, pady=4)
@@ -1512,14 +1599,11 @@ class CATSettingsDialog(tk.Toplevel):
                                   fg=TH["cyan"], font=("Consolas",12))
         self._mode_lbl.pack(side="left")
 
-        # ── Separator ──
         tk.Frame(self, bg=TH["warn"], height=1).pack(fill="x", padx=16, pady=6)
 
-        # ── Grid cu setari ──
         gf = tk.Frame(self, bg=TH["bg"]); gf.pack(fill="x", padx=16, pady=2)
         gf.columnconfigure(1, weight=1)
 
-        # Protocol
         tk.Label(gf, text="Protocol:", **lo).grid(row=0, column=0, sticky="w", pady=5, padx=(0,10))
         self._prot_v = tk.StringVar(value=self.cfg.get("cat_protocol","Yaesu CAT"))
         self._prot_cb = ttk.Combobox(gf, textvariable=self._prot_v,
@@ -1528,7 +1612,6 @@ class CATSettingsDialog(tk.Toplevel):
         self._prot_cb.grid(row=0, column=1, sticky="w", pady=5)
         self._prot_cb.bind("<<ComboboxSelected>>", self._on_protocol_change)
 
-        # Port COM
         tk.Label(gf, text="Port COM:", **lo).grid(row=1, column=0, sticky="w", pady=5, padx=(0,10))
         port_frame = tk.Frame(gf, bg=TH["bg"]); port_frame.grid(row=1, column=1, sticky="w", pady=5)
         ports = CATEngine.list_ports()
@@ -1543,14 +1626,12 @@ class CATSettingsDialog(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white", font=("Consolas",9),
                   width=7).pack(side="left", padx=6)
 
-        # Baud
         tk.Label(gf, text="Baud Rate:", **lo).grid(row=2, column=0, sticky="w", pady=5, padx=(0,10))
         self._baud_v = tk.StringVar(value=str(self.cfg.get("cat_baud",38400)))
         ttk.Combobox(gf, textvariable=self._baud_v,
                      values=["1200","2400","4800","9600","19200","38400","57600","115200"],
                      state="readonly", width=12, font=("Consolas",11)).grid(row=2, column=1, sticky="w", pady=5)
 
-        # CI-V Address
         self._civ_row_lbl = tk.Label(gf, text="CI-V Adresa (hex):", **lo)
         self._civ_row_lbl.grid(row=3, column=0, sticky="w", pady=5, padx=(0,10))
         civ_f = tk.Frame(gf, bg=TH["bg"]); civ_f.grid(row=3, column=1, sticky="w", pady=5)
@@ -1560,7 +1641,6 @@ class CATSettingsDialog(tk.Toplevel):
         tk.Label(civ_f, text="  94=IC-7300  A2=IC-705  76=IC-7100",
                  **lo9).pack(side="left")
 
-        # Hamlib host
         self._ham_row_lbl = tk.Label(gf, text="Hamlib Host:", **lo)
         self._ham_row_lbl.grid(row=4, column=0, sticky="w", pady=5, padx=(0,10))
         ham_f = tk.Frame(gf, bg=TH["bg"]); ham_f.grid(row=4, column=1, sticky="w", pady=5)
@@ -1572,16 +1652,13 @@ class CATSettingsDialog(tk.Toplevel):
         self._ham_port_e.insert(0, str(self.cfg.get("cat_hamlib_port",4532)))
         self._ham_port_e.pack(side="left", padx=4)
 
-        # Hamlib help text
         self._ham_help_lbl = tk.Label(gf,
             text="Porneste: rigctld -m 122 -r COM3 -s 38400 (FT-891)  |  rigctld -m 3061 -r COM4 (IC-7300)",
             bg=TH["bg"], fg=TH["warn"], font=("Consolas",8), justify="left")
         self._ham_help_lbl.grid(row=5, column=0, columnspan=2, sticky="w", pady=2)
 
-        # ── Separator ──
         tk.Frame(self, bg=TH["accent"], height=1).pack(fill="x", padx=16, pady=8)
 
-        # ── Butoane Conectare ──
         cb = tk.Frame(self, bg=TH["bg"]); cb.pack(pady=4)
         tk.Button(cb, text="  Conecteaza / Connect  ", command=self._connect,
                   bg=TH["ok"], fg="white",
@@ -1590,7 +1667,6 @@ class CATSettingsDialog(tk.Toplevel):
                   bg=TH["err"], fg="white",
                   font=("Consolas",11)).pack(side="left", padx=6)
 
-        # ── Test frecventa spre radio ──
         tf2 = tk.Frame(self, bg=TH["bg"]); tf2.pack(pady=4)
         tk.Label(tf2, text="Test freq -> Radio:", **lo).pack(side="left")
         self._test_freq_e = tk.Entry(tf2, width=8, **eo)
@@ -1600,7 +1676,6 @@ class CATSettingsDialog(tk.Toplevel):
                   bg=TH["accent"], fg="white",
                   font=("Consolas",10)).pack(side="left", padx=4)
 
-        # ── Salvare / Inchide ──
         tk.Frame(self, bg=TH["btn_bg"], height=1).pack(fill="x", padx=16, pady=6)
         bf2 = tk.Frame(self, bg=TH["bg"]); bf2.pack(pady=8)
         tk.Button(bf2, text="  Salveaza / Save  ", command=self._save,
@@ -1610,7 +1685,6 @@ class CATSettingsDialog(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white",
                   font=("Consolas",11)).pack(side="left", padx=8)
 
-        # Aplica vizibilitate initiala
         self._on_protocol_change()
 
     def _on_protocol_change(self, e=None):
@@ -1618,7 +1692,6 @@ class CATSettingsDialog(tk.Toplevel):
         is_icom   = (proto == "Icom CI-V")
         is_hamlib = (proto == "Hamlib/rigctld")
 
-        # CI-V row: show/hide
         if is_icom:
             self._civ_row_lbl.grid()
             self._civ_e.master.grid()
@@ -1626,7 +1699,6 @@ class CATSettingsDialog(tk.Toplevel):
             self._civ_row_lbl.grid_remove()
             self._civ_e.master.grid_remove()
 
-        # Hamlib rows: show/hide
         if is_hamlib:
             self._ham_row_lbl.grid()
             self._ham_host_e.master.grid()
@@ -1636,7 +1708,6 @@ class CATSettingsDialog(tk.Toplevel):
             self._ham_host_e.master.grid_remove()
             self._ham_help_lbl.grid_remove()
 
-        # Baud default pentru protocol
         default_baud = CAT_BAUD_DEFAULTS.get(proto, 9600)
         self._baud_v.set(str(default_baud))
 
@@ -1858,13 +1929,13 @@ class FirstRunDialog(tk.Toplevel):
         super().__init__(parent)
         self.cfg = cfg
         self.result = None
-        self.title("YO Log PRO v17.0 — Configurare initiala / First Setup")
+        self.title("YO Log PRO v17.1 — Configurare initiala / First Setup")
         self.geometry("520x640")
         self.configure(bg=TH["bg"])
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
-        self.protocol("WM_DELETE_WINDOW", self._save)  # nu permite inchidere fara salvare
+        self.protocol("WM_DELETE_WINDOW", self._save)
         self._build()
         center_dialog(self, parent)
 
@@ -1877,10 +1948,9 @@ class FirstRunDialog(tk.Toplevel):
         eon = {"bg":TH["entry_bg"], "fg":TH["fg"],   "font":("Consolas",11),
                "insertbackground":TH["fg"]}
 
-        # ── Banner ──
         banner = tk.Frame(self, bg=TH["header_bg"], pady=12)
         banner.pack(fill="x")
-        tk.Label(banner, text="📻  YO Log PRO v17.0",
+        tk.Label(banner, text="📻  YO Log PRO v17.1",
                  bg=TH["header_bg"], fg=TH["gold"],
                  font=("Consolas",16,"bold")).pack()
         tk.Label(banner, text="CAT Edition — Amateur Radio Logger",
@@ -1890,14 +1960,12 @@ class FirstRunDialog(tk.Toplevel):
                  bg=TH["header_bg"], fg=TH["fg"],
                  font=("Consolas",9)).pack(pady=(2,0))
 
-        # ── Titlu sectiune ──
         tk.Label(self, text="  Configurare initiala / Initial Setup",
                  bg=TH["bg"], fg=TH["cyan"],
                  font=("Consolas",11,"bold")).pack(anchor="w", padx=16, pady=(12,4))
 
         tk.Frame(self, bg=TH["warn"], height=1).pack(fill="x", padx=16, pady=(0,8))
 
-        # ── Grid campuri ──
         gf = tk.Frame(self, bg=TH["bg"])
         gf.pack(fill="x", padx=16)
         gf.columnconfigure(1, weight=1)
@@ -1927,14 +1995,13 @@ class FirstRunDialog(tk.Toplevel):
                                   "Cod judet 2 litere (ex: NT, IS, BV...)", upper=True)
         self._e["op_name"] = row(3, "Nume operator / Name",   "op_name", "",        eon,
                                   "Prenume si Nume (pentru exporturi)")
-        self._e["addr"]    = row(4, "Adresa / Address",       "addr",    "",        eon,
+        self._e["addr"]    = row(4, "Adresa / Address",       "addr",    "Târgu Neamț, Neamț, Romania", eon,
                                   "Adresa postala (optional, pentru exporturi)")
         self._e["power"]   = row(5, "Putere TX / TX Power",   "power",   "100",     eon,
                                   "Putere in wati (ex: 100)")
         self._e["email"]   = row(6, "Email",                  "email",   "",        eon,
                                   "Email de contact (optional)")
 
-        # ── Limba / Language ──
         tk.Label(gf, text="Limba / Language", **lo).grid(
             row=14, column=0, sticky="w", pady=(10,0), padx=(0,12))
         self._lang_v = tk.StringVar(value=self.cfg.get("lang","ro"))
@@ -1945,13 +2012,11 @@ class FirstRunDialog(tk.Toplevel):
                            activebackground=TH["bg"],
                            font=("Consolas",11)).pack(side="left", padx=8)
 
-        # ── Nota obligatorie ──
         tk.Frame(self, bg=TH["accent"], height=1).pack(fill="x", padx=16, pady=(12,4))
         tk.Label(self,
                  text="* Indicativul si Locatorul sunt obligatorii pentru export corect.",
                  bg=TH["bg"], fg=TH["warn"], font=("Consolas",9)).pack(anchor="w", padx=16)
 
-        # ── Butoane ──
         bf = tk.Frame(self, bg=TH["bg"]); bf.pack(pady=14)
         tk.Button(bf,
                   text="  ✅  Salveaza si Incepe / Save & Start  ",
@@ -1975,23 +2040,21 @@ class FirstRunDialog(tk.Toplevel):
         self.destroy()
 
 
-
 # ═══════════════════════════════════════════════════════════
 # LOG EDITOR — Editor dedicat log cu toate funcțiile
 # ═══════════════════════════════════════════════════════════
 
 class LogEditorWindow(tk.Toplevel):
-    """Fereastră dedicată pentru editarea completă a logului.
-    Independentă de fereastra principală — poate rula separat."""
+    """Fereastră dedicată pentru editarea completă a logului."""
 
     def __init__(self, parent, log_ref, contests_ref, cfg_ref,
                  on_change=None, cid_getter=None):
         super(LogEditorWindow, self).__init__(parent)
-        self._log       = log_ref        # referință la lista log din App
+        self._log       = log_ref
         self._contests  = contests_ref
         self._cfg       = cfg_ref
-        self._on_change = on_change      # callback când logul se modifică
-        self._cid_getter = cid_getter    # lambda -> cid curent
+        self._on_change = on_change
+        self._cid_getter = cid_getter
         self._edit_idx  = None
         self._sort_col  = None
         self._sort_rev  = False
@@ -2003,9 +2066,7 @@ class LogEditorWindow(tk.Toplevel):
         self._build()
         self._refresh()
 
-    # ── UI ──────────────────────────────────────────────────
     def _build(self):
-        # ─ Toolbar ─
         tb = tk.Frame(self, bg=TH["header_bg"], pady=5)
         tb.pack(fill="x")
         tk.Label(tb, text="📝 Log Editor",
@@ -2029,12 +2090,10 @@ class LogEditorWindow(tk.Toplevel):
             if i == 0:
                 self._save_btn = b
 
-        # Status
         self._status = tk.Label(tb, text="", bg=TH["header_bg"],
                                  fg=TH["fg"], font=("Consolas", 9))
         self._status.pack(side="right", padx=8)
 
-        # ─ Search bar ─
         sf = tk.Frame(self, bg=TH["bg"], pady=3)
         sf.pack(fill="x", padx=8)
         tk.Label(sf, text="🔍 Filtru rapid:",
@@ -2069,7 +2128,6 @@ class LogEditorWindow(tk.Toplevel):
                                     fg=TH["gold"], font=("Consolas", 9, "bold"))
         self._count_lbl.pack(side="right", padx=8)
 
-        # ─ Treeview ─
         tf = tk.Frame(self, bg=TH["bg"])
         tf.pack(fill="both", expand=True, padx=8, pady=(0,4))
 
@@ -2104,7 +2162,6 @@ class LogEditorWindow(tk.Toplevel):
         self._tree.bind("<Delete>",    lambda e: self._delete_sel())
         self._tree.bind("<Button-3>",  self._ctx_menu)
 
-        # ─ Edit Form ─
         ef = tk.LabelFrame(self, text=" ✏ Editare QSO ",
                            bg=TH["bg"], fg=TH["gold"],
                            font=("Consolas", 10, "bold"),
@@ -2149,13 +2206,11 @@ class LogEditorWindow(tk.Toplevel):
                 e.pack(); self._ent[key] = e
                 if key == "call":
                     e.bind("<KeyRelease>", self._on_call_key)
-                    # Callbook button inline
                     tk.Button(frm, text="🌐",
                               command=self._callbook_form,
                               bg=TH["accent"], fg="white",
                               font=("Consolas", 8), width=2).pack()
 
-        # Butoane form
         bf2 = tk.Frame(ef, bg=TH["bg"])
         bf2.grid(row=0, column=len(fields), padx=6)
         self._save_btn2 = tk.Button(bf2, text="💾 Salvează",
@@ -2168,10 +2223,8 @@ class LogEditorWindow(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white",
                   font=("Consolas", 9), width=11).pack(pady=1)
 
-        # Undo stack local
         self._undo_stack = deque(maxlen=50)
 
-    # ── Context menu ───────────────────────────────────────
     def _ctx_menu(self, event):
         ctx = tk.Menu(self, tearoff=0)
         ctx.add_command(label="✏ Editează",    command=self._load_into_form)
@@ -2201,7 +2254,6 @@ class LogEditorWindow(tk.Toplevel):
             except Exception:
                 pass
 
-    # ── Treeview ───────────────────────────────────────────
     def _refresh(self):
         for row in self._tree.get_children():
             self._tree.delete(row)
@@ -2223,7 +2275,7 @@ class LogEditorWindow(tk.Toplevel):
 
             nr      = len(self._log) - i
             key     = (c, b, m)
-            tag     = ("dup",)  if key in seen else                       ("spec",) if c in sp     else                       ("alt",)  if i % 2 == 0  else ()
+            tag     = ("dup",)  if key in seen else ("spec",) if c in sp else ("alt",)  if i % 2 == 0  else ()
             seen.add(key)
             country, _ = DXCC.lookup(c)
             pts = Score.qso(q, cc, self._cfg) if hs else ""
@@ -2261,7 +2313,6 @@ class LogEditorWindow(tk.Toplevel):
         for idx, (_, k) in enumerate(items):
             self._tree.move(k, "", idx)
 
-    # ── Form helpers ───────────────────────────────────────
     def _load_into_form(self):
         sel = self._tree.selection()
         if not sel: return
@@ -2338,13 +2389,11 @@ class LogEditorWindow(tk.Toplevel):
             messagebox.showwarning("Log Editor", "Banda și modul sunt obligatorii!"); return
 
         if self._edit_idx is not None:
-            # UPDATE
             self._undo_stack.append(("upd", self._edit_idx,
                                      copy.deepcopy(self._log[self._edit_idx])))
             self._log[self._edit_idx] = q
             self._set_status(f"✓ Actualizat QSO #{len(self._log)-self._edit_idx}: {q['c']}")
         else:
-            # INSERT NOU (sus)
             self._undo_stack.append(("add", 0, q))
             self._log.insert(0, q)
             self._set_status(f"✓ Adăugat: {q['c']} {q['b']} {q['m']}")
@@ -2426,23 +2475,19 @@ class LogEditorWindow(tk.Toplevel):
         except Exception:
             pass
 
-    # ── Callbook ───────────────────────────────────────────
     def _callbook_form(self):
-        """Lookup din câmpul call din formular."""
         w = self._ent.get("call")
         call = w.get().strip().upper() if w and not isinstance(w, tk.StringVar) else ""
         if call:
             CallbookDialog(self, call, on_fill=self._fill_from_callbook)
 
     def _callbook_sel(self):
-        """Lookup indicativ selectat din treeview."""
         call = self._sel_call()
         if not call:
             messagebox.showinfo("Callbook", "Selectați un QSO din log."); return
         CallbookDialog(self, call, on_fill=self._fill_from_callbook)
 
     def _fill_from_callbook(self, data):
-        """Completează nota cu locatorul dacă e disponibil."""
         loc = data.get("loc","")
         if loc and self._ent.get("note"):
             self._ent["note"].delete(0,"end")
@@ -2450,16 +2495,14 @@ class LogEditorWindow(tk.Toplevel):
         self._set_status(
             f"Callbook: {data.get('call','')} — {data.get('name','')} — {data.get('qth','')}")
 
-    @staticmethod
-    def _open_qrz(call):
+    def _open_qrz(self, call):
         if call:
             webbrowser.open(f"https://www.qrz.com/db/{call.upper()}")
 
-    @staticmethod
-    def _open_ro(call):
+    def _open_ro(self, call):
         if call:
             webbrowser.open(
-                f"https://radioamator.ro/callbook/?call={quote_plus(call.upper())}")
+                f"https://www.radioamator.ro/call-book/yocall.php?call={quote_plus(call.upper())}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2467,9 +2510,10 @@ class LogEditorWindow(tk.Toplevel):
 # ═══════════════════════════════════════════════════════════
 
 class CallbookDialog(tk.Toplevel):
-    """Dialog căutare callbook: radioamator.ro (scraping) + QRZ.com web."""
+    """Dialog căutare callbook: radioamator.ro + QRZ.com web."""
 
-    RADIOAMATOR_URL = "https://radioamator.ro/callbook/?call={}"
+    # URL CORECTAT pentru radioamator.ro
+    RADIOAMATOR_URL = "https://www.radioamator.ro/call-book/yocall.php?call={}"
     QRZ_URL         = "https://www.qrz.com/db/{}"
 
     def __init__(self, parent, call="", on_fill=None):
@@ -2490,7 +2534,6 @@ class CallbookDialog(tk.Toplevel):
         eo = {"bg": TH["entry_bg"], "fg": TH["gold"],
               "font": ("Consolas", 12), "insertbackground": TH["fg"]}
 
-        # ─ Search bar ─
         sf = tk.Frame(self, bg=TH["header_bg"], pady=6)
         sf.pack(fill="x")
         tk.Label(sf, text="Indicativ:", bg=TH["header_bg"],
@@ -2519,11 +2562,9 @@ class CallbookDialog(tk.Toplevel):
                                    fg=TH["warn"], font=("Consolas", 10))
         self._spin_lbl.pack(side="right", padx=8)
 
-        # ─ Result panel ─
         rf = tk.Frame(self, bg=TH["bg"])
         rf.pack(fill="both", expand=True, padx=10, pady=6)
 
-        # Info fields grid
         self._info_frame = tk.Frame(rf, bg=TH["bg"])
         self._info_frame.pack(fill="x", pady=(0,6))
 
@@ -2553,7 +2594,6 @@ class CallbookDialog(tk.Toplevel):
             val.pack(side="left")
             self._info_labels[key] = val
 
-        # Raw HTML viewer
         tk.Label(rf, text="Răspuns brut / sursă:", bg=TH["bg"],
                  fg=TH["fg"], font=("Consolas", 8)).pack(anchor="w")
         self._raw_box = scrolledtext.ScrolledText(
@@ -2562,7 +2602,6 @@ class CallbookDialog(tk.Toplevel):
             insertbackground=TH["fg"])
         self._raw_box.pack(fill="both", expand=True)
 
-        # ─ Buttons ─
         bf = tk.Frame(self, bg=TH["bg"], pady=6)
         bf.pack(fill="x")
         tk.Button(bf, text="✅ Folosește locatorul",
@@ -2578,7 +2617,6 @@ class CallbookDialog(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white",
                   font=("Consolas", 10), width=10).pack(side="right", padx=8)
 
-    # ── Search ─────────────────────────────────────────────
     def _search(self):
         call = self._call_e.get().strip().upper()
         if not call:
@@ -2603,92 +2641,141 @@ class CallbookDialog(tk.Toplevel):
             self.after(0, lambda: self._show_error(str(e)))
 
     def _fetch_radioamator(self, call):
-        """Scraping radioamator.ro/callbook"""
+        """Scraping radioamator.ro/call-book/yocall.php - URL CORECT"""
         url = self.RADIOAMATOR_URL.format(quote_plus(call))
         req = Request(url, headers={
-            "User-Agent": "YOLogPROv171/callbook (+https://github.com)",
-            "Accept": "text/html",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ro,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         })
         try:
-            resp = urlopen(req, timeout=8)
+            resp = urlopen(req, timeout=15)
             html = resp.read().decode("utf-8", errors="ignore")
         except Exception as e:
             return {}, f"Eroare conectare: {e}"
 
         data = {"call": call}
 
-        # Extrage câmpuri din tabel HTML radioamator.ro
-        # Pattern: <td class="...">Label</td><td>Valoare</td>
+        # Patterns îmbunătățite pentru radioamator.ro
         patterns = {
-            "name":    [r'Nume[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Name[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "qth":     [r'QTH[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Localitate[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "loc":     [r'Locator[^<]*</t[dh]>\s*<td[^>]*>([A-R]{2}\d{2}[A-X]{0,2})',
-                        r'>([A-R]{2}\d{2}[A-X]{2})<'],
-            "class":   [r'Clas[aă][^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "expires": [r'Expir[aă][^<]*</t[dh]>\s*<td[^>]*>([^<]+)<',
-                        r'Valabil[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
-            "itu":     [r'ITU[^<]*</t[dh]>\s*<td[^>]*>(\d+)<'],
-            "cq":      [r'CQ[^<]*</t[dh]>\s*<td[^>]*>(\d+)<'],
-            "dxcc":    [r'DXCC[^<]*</t[dh]>\s*<td[^>]*>([^<]+)<'],
+            "name": [
+                r'<td[^>]*>\s*Nume\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'<td[^>]*>\s*Name\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'Nume[^<]*</t[dh][^>]*>\s*<td[^>]*>([^<]+)<',
+                r'<strong>\s*Nume[^:]*:\s*</strong>\s*([^<\n]+)',
+            ],
+            "qth": [
+                r'<td[^>]*>\s*Localitate\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'<td[^>]*>\s*QTH\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'Localitate[^<]*</t[dh][^>]*>\s*<td[^>]*>([^<]+)<',
+                r'<strong>\s*Localitate[^:]*:\s*</strong>\s*([^<\n]+)',
+            ],
+            "loc": [
+                r'<td[^>]*>\s*Locator\s*</td>\s*<td[^>]*>\s*([A-R]{2}\d{2}[A-X]{0,2})',
+                r'Locator[^<]*</t[dh][^>]*>\s*<td[^>]*>\s*([A-R]{2}\d{2}[A-X]{0,2})',
+                r'>([A-R]{2}\d{2}[A-X]{2})<',
+                r'<strong>\s*Locator[^:]*:\s*</strong>\s*([A-R]{2}\d{2}[A-X]{0,2})',
+            ],
+            "class": [
+                r'<td[^>]*>\s*Clasa?\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'Clas[aă][^<]*</t[dh][^>]*>\s*<td[^>]*>([^<]+)<',
+                r'<strong>\s*Clas[aă][^:]*:\s*</strong>\s*([^<\n]+)',
+            ],
+            "expires": [
+                r'<td[^>]*>\s*Valabilitate\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'<td[^>]*>\s*Expir[ăa]\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'<strong>\s*(?:Valabilitate|Expir[aă])[^:]*:\s*</strong>\s*([^<\n]+)',
+            ],
         }
+        
         for field, pats in patterns.items():
             for pat in pats:
                 m = re.search(pat, html, re.IGNORECASE | re.DOTALL)
                 if m:
                     val = m.group(1).strip()
                     val = re.sub(r'<[^>]+>', '', val).strip()
-                    if val and val != "—":
+                    if val and val not in ("—", "-", ""):
                         data[field] = val
                         break
 
-        # Fallback locator: caută orice grid square valid
+        # Fallback: caută orice grid square valid în tot HTML-ul
         if "loc" not in data:
-            for m in re.finditer(r'([A-R]{2}\d{2}[A-X]{2})', html, re.IGNORECASE):
+            for m in re.finditer(r'\b([A-R]{2}\d{2}[A-X]{2})\b', html, re.IGNORECASE):
                 candidate = m.group(1).upper()
                 if Loc.valid(candidate):
                     data["loc"] = candidate
                     break
 
         # Detectează "nu există" / "not found"
-        if re.search(r'(nu a fost g[aă]sit|not found|nu exist[aă]|no result)',
+        if re.search(r'(nu a fost g[aă]sit|not found|nu exist[aă]|fara rezultat|niciun rezultat)',
                      html, re.IGNORECASE):
             data["_not_found"] = True
 
-        # Scurtează rawul
         raw_short = re.sub(r'\s+', ' ', html)[:3000]
         return data, raw_short
 
     def _fetch_qrz(self, call):
-        """Deschide QRZ.com și extrage date de bază din HTML public."""
+        """Scraping QRZ.com pentru date complete."""
         url = self.QRZ_URL.format(call)
         req = Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; YOLogPROv171)",
-            "Accept": "text/html",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate",
         })
         try:
-            resp = urlopen(req, timeout=8)
+            resp = urlopen(req, timeout=15)
             html = resp.read().decode("utf-8", errors="ignore")
         except Exception as e:
             return {}, f"Eroare conectare QRZ: {e}"
 
         data = {"call": call}
 
+        # Patterns îmbunătățite pentru QRZ.com
         patterns = {
-            "name":  [r'<title>[^-]*-\s*([^<]+?)\s*-.*QRZ',
-                      r'fname["\s]+value="([^"]+)"',
-                      r'<h1[^>]*>\s*([A-Z][^<]{3,40}?)\s*</h1>'],
-            "qth":   [r'addr2["\s]+value="([^"]+)"',
-                      r'<td[^>]*>\s*QTH\s*</td>\s*<td[^>]*>([^<]+)<'],
-            "loc":   [r'grid["\s]+value="([A-R]{2}\d{2}[A-Xa-x]{0,2})"',
-                      r'([A-R]{2}\d{2}[A-X]{2})'],
-            "dxcc":  [r'dxcc["\s]+value="([^"]+)"',
-                      r'DXCC.*?<td[^>]*>([^<]+)<'],
-            "cq":    [r'cqzone["\s]+value="(\d+)"'],
-            "itu":   [r'ituzone["\s]+value="(\d+)"'],
-            "class": [r'class["\s]+value="([^"]+)"'],
+            "name": [
+                r'<title>[^-]*-\s*([^<]+?)\s*-.*QRZ',
+                r'fname["\s]+value="([^"]+)"',
+                r'<h1[^>]*class="[^"]*name[^"]*"[^>]*>\s*([^<]+)',
+                r'<td[^>]*>\s*Name\s*</td>\s*<td[^>]*>([^<]+)</td>',
+                r'<span[^>]*class="[^"]*name[^"]*"[^>]*>([^<]+)</span>',
+            ],
+            "qth": [
+                r'addr2["\s]+value="([^"]+)"',
+                r'<td[^>]*>\s*QTH\s*</td>\s*<td[^>]*>([^<]+)<',
+                r'<td[^>]*>\s*City\s*</td>\s*<td[^>]*>([^<]+)<',
+                r'city["\s]+value="([^"]+)"',
+            ],
+            "loc": [
+                r'grid["\s]+value="([A-R]{2}\d{2}[A-Xa-x]{0,2})"',
+                r'locator["\s]+value="([A-R]{2}\d{2}[A-Xa-x]{0,2})"',
+                r'\b([A-R]{2}\d{2}[A-X]{2})\b',
+            ],
+            "dxcc": [
+                r'dxcc["\s]+value="([^"]+)"',
+                r'<td[^>]*>\s*DXCC\s*</td>\s*<td[^>]*>([^<]+)<',
+                r'country["\s]+value="([^"]+)"',
+            ],
+            "cq": [
+                r'cqzone["\s]+value="(\d+)"',
+                r'<td[^>]*>\s*CQ\s*Zone\s*</td>\s*<td[^>]*>(\d+)<',
+            ],
+            "itu": [
+                r'ituzone["\s]+value="(\d+)"',
+                r'<td[^>]*>\s*ITU\s*Zone\s*</td>\s*<td[^>]*>(\d+)<',
+            ],
+            "class": [
+                r'class["\s]+value="([^"]+)"',
+                r'lic_class["\s]+value="([^"]+)"',
+            ],
+            "email": [
+                r'email["\s]+value="([^"]+)"',
+                r'<a[^>]*href="mailto:([^"]+)"',
+            ],
         }
+        
         for field, pats in patterns.items():
             for pat in pats:
                 m = re.search(pat, html, re.IGNORECASE | re.DOTALL)
@@ -2698,21 +2785,22 @@ class CallbookDialog(tk.Toplevel):
                         data[field] = val
                         break
 
+        # Fallback locator
         if "loc" not in data:
-            for m in re.finditer(r'([A-R]{2}\d{2}[A-X]{2})', html):
+            for m in re.finditer(r'\b([A-R]{2}\d{2}[A-X]{2})\b', html):
                 if Loc.valid(m.group(1).upper()):
                     data["loc"] = m.group(1).upper()
                     break
 
         not_found = re.search(
-            r'(not\s*found|no\s*record|callsign\s*not)', html, re.IGNORECASE)
+            r'(not\s*found|no\s*record|callsign\s*not|does\s*not\s*exist)',
+            html, re.IGNORECASE)
         if not_found:
             data["_not_found"] = True
 
         raw_short = re.sub(r'\s+', ' ', html)[:3000]
         return data, raw_short
 
-    # ── Display ────────────────────────────────────────────
     def _show_result(self, data, raw):
         self._set_loading(False)
         self._result = data
@@ -2767,7 +2855,6 @@ class CallbookDialog(tk.Toplevel):
         except Exception:
             pass
 
-    # ── Actions ────────────────────────────────────────────
     def _use_loc(self):
         loc = self._result.get("loc","")
         if not loc:
@@ -2809,7 +2896,7 @@ class CallbookDialog(tk.Toplevel):
 # ═══════════════════════════════════════════════════════════
 
 class BandMapWindow(tk.Toplevel):
-    """Fereastră Band Map — afișează activitate QSO per bandă + frecvențe."""
+    """Fereastră Band Map — afișează activitate QSO per bandă."""
 
     BAND_COLORS = {
         "160m": "#ff4444", "80m": "#ff8800", "60m": "#ffcc00",
@@ -2850,7 +2937,6 @@ class BandMapWindow(tk.Toplevel):
         self._canvas.pack(fill="both", expand=True, padx=4, pady=4)
         self._canvas.bind("<MouseWheel>", lambda e: self._canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
 
-        # Stats bar
         self._stat_lbl = tk.Label(self, text="", bg=TH["bg"], fg=TH["fg"],
                                    font=("Consolas", 9))
         self._stat_lbl.pack(side="bottom", fill="x", padx=6, pady=2)
@@ -2861,7 +2947,6 @@ class BandMapWindow(tk.Toplevel):
         cfg = self.cfg_getter()
         my_loc = cfg.get("loc", "")
 
-        # Grupează QSO-urile pe bandă
         band_qsos = {}
         for q in log:
             b = q.get("b", "?")
@@ -2882,31 +2967,26 @@ class BandMapWindow(tk.Toplevel):
             color = self.BAND_COLORS.get(band, "#888888")
             count = len(band_qsos.get(band, []))
 
-            # Header bandă
             self._canvas.create_rectangle(x, 5, x + col_w - 2, 30,
                                           fill=color, outline="", tags="band_hdr")
             self._canvas.create_text(x + col_w//2, 17, text=f"{band}",
                                      font=("Consolas", 9, "bold"), fill="#000000")
 
-            # Counter QSO
             self._canvas.create_text(x + col_w//2, 42,
                                      text=f"{count} QSO",
                                      font=("Consolas", 8), fill=color)
 
-            # Listează QSO-urile pe bandă
             qsos = band_qsos.get(band, [])
-            for ri, q in enumerate(reversed(qsos[-20:])):  # max 20 per bandă
+            for ri, q in enumerate(reversed(qsos[-20:])):
                 y = 55 + ri * row_h
                 call = q.get("c", "?")
                 freq = q.get("f", "")
                 country, _ = DXCC.lookup(call)
 
-                # Colorează diferit dacă e DX (altă țară)
                 my_country, _ = DXCC.lookup(cfg.get("call", "YO8ACR"))
                 is_dx = country != my_country and country != "Unknown"
                 row_color = TH.get("cyan", "#00aaff") if is_dx else TH["fg"]
 
-                # Calculează distanța dacă avem locator
                 note = q.get("n", "")
                 dist_txt = ""
                 if my_loc and Loc.valid(my_loc) and len(note) >= 4 and Loc.valid(note[:6] if len(note)>=6 else note[:4]):
@@ -2918,7 +2998,6 @@ class BandMapWindow(tk.Toplevel):
                 self._canvas.create_text(x + 3, y + 11, text=disp,
                                          font=("Consolas", 8), fill=row_color, anchor="w")
 
-        # Stats
         total = len(log)
         dxcc_set = set(DXCC.prefix(q.get("c","")) for q in log)
         self._stat_lbl.config(
@@ -2930,7 +3009,7 @@ class BandMapWindow(tk.Toplevel):
         try:
             if self.winfo_exists():
                 self._refresh()
-                self.after(30000, self._schedule)  # refresh la 30s
+                self.after(30000, self._schedule)
         except Exception:
             pass
 
@@ -2952,7 +3031,7 @@ class DXClusterWindow(tk.Toplevel):
 
     def __init__(self, parent, on_spot=None):
         super(DXClusterWindow, self).__init__(parent)
-        self.on_spot = on_spot  # callback(call, freq) la click spot
+        self.on_spot = on_spot
         self.title("📡 DX Cluster — YO Log PRO v17.1")
         self.geometry("860x520")
         self.configure(bg=TH["bg"])
@@ -2966,7 +3045,6 @@ class DXClusterWindow(tk.Toplevel):
         self._tick()
 
     def _build(self):
-        # Toolbar
         tb = tk.Frame(self, bg=TH["header_bg"], pady=4)
         tb.pack(fill="x")
         tk.Label(tb, text="Cluster:", bg=TH["header_bg"], fg=TH["fg"],
@@ -2990,7 +3068,6 @@ class DXClusterWindow(tk.Toplevel):
                                     fg=TH["err"], font=("Consolas", 9))
         self._status_lbl.pack(side="right", padx=8)
 
-        # Filter bar
         ff = tk.Frame(self, bg=TH["bg"], pady=2)
         ff.pack(fill="x", padx=6)
         tk.Label(ff, text="Filtru bandă:", bg=TH["bg"], fg=TH["fg"],
@@ -3014,7 +3091,6 @@ class DXClusterWindow(tk.Toplevel):
                                          fg=TH["gold"], font=("Consolas", 9, "bold"))
         self._spot_count_lbl.pack(side="right")
 
-        # Spoturi treeview
         tf = tk.Frame(self, bg=TH["bg"])
         tf.pack(fill="both", expand=True, padx=6, pady=3)
         cols = ("time", "dx", "freq", "band", "mode", "country", "comment", "spotter")
@@ -3032,7 +3108,6 @@ class DXClusterWindow(tk.Toplevel):
         self._tree.bind("<Double-1>", self._on_spot_dbl)
         self._tree.bind("<Return>", self._on_spot_dbl)
 
-        # Raw log box
         rf = tk.Frame(self, bg=TH["bg"])
         rf.pack(fill="x", padx=6)
         tk.Label(rf, text="Raw cluster:", bg=TH["bg"], fg=TH["fg"],
@@ -3042,7 +3117,6 @@ class DXClusterWindow(tk.Toplevel):
                                                    state="disabled", insertbackground=TH["fg"])
         self._raw_box.pack(fill="x")
 
-        # Cmd entry
         cf2 = tk.Frame(self, bg=TH["bg"])
         cf2.pack(fill="x", padx=6, pady=3)
         self._cmd_e = tk.Entry(cf2, bg=TH["entry_bg"], fg=TH["gold"],
@@ -3083,7 +3157,6 @@ class DXClusterWindow(tk.Toplevel):
             self._sock.connect((host, port))
             self._connected = True
             self._queue.append(("status", "● Conectat la " + host))
-            # Login
             buf = b""
             t0 = time.time()
             while time.time() - t0 < 8:
@@ -3094,7 +3167,6 @@ class DXClusterWindow(tk.Toplevel):
                     break
             self._sock.sendall((call + "\r\n").encode("ascii", errors="ignore"))
             time.sleep(0.5)
-            # Receive loop
             self._sock.settimeout(5)
             line_buf = ""
             while not self._stop_evt.is_set():
@@ -3121,34 +3193,56 @@ class DXClusterWindow(tk.Toplevel):
         self._queue.append(("status", "● Deconectat"))
 
     def _parse_spot(self, line):
-        """Parsează o linie DX de Cluster: DX de YO8ACR: 14200.0  KP4RV  SSB"""
+        """Parsează o linie DX de Cluster - îmbunătățit pentru mai multe formate."""
+        line = line.strip()
+        
+        # Format 1: DX de YO8ACR: 14200.0  KP4RV  SSB
         m = re.match(
-            r'DX\s+de\s+(\S+)\s*[:-]\s*(\S+)\s+(\S+)\s*(.*)',
+            r'DX\s+de\s+(\S+)\s*[:-]\s*(\d+[\d.]*)\s+(\S+)\s*(.*)',
             line, re.IGNORECASE)
-        if not m:
-            # format alternativ: DXC  14200.0  KP4RV  <comment>
-            m2 = re.match(r'DX\s+(\d[\d.]+)\s+(\w+)\s*(.*)', line, re.IGNORECASE)
+        if m:
+            spotter = m.group(1)
+            freq_s = m.group(2)
+            dx_call = m.group(3)
+            comment = m.group(4)
+        else:
+            # Format 2: DX 14200.0 KP4RV <comment>
+            m2 = re.match(r'DX\s+(\d+[\d.]*)\s+(\S+)\s*(.*)', line, re.IGNORECASE)
             if m2:
-                freq_s, dx_call, comment = m2.group(1), m2.group(2), m2.group(3)
+                freq_s = m2.group(1)
+                dx_call = m2.group(2)
+                comment = m2.group(3)
                 spotter = ""
             else:
-                return None
-        else:
-            spotter = m.group(1)
-            freq_s = m.group(2) if not m.group(2).isalpha() else m.group(3)
-            dx_call = m.group(3) if not m.group(2).isalpha() else m.group(2)
-            comment = m.group(4)
+                # Format 3: Simplu - doar frecvență și call
+                m3 = re.match(r'^\s*(\d+[\d.]*)\s+(\S{3,})\s*(.*)$', line)
+                if m3:
+                    freq_s = m3.group(1)
+                    dx_call = m3.group(2)
+                    comment = m3.group(3)
+                    spotter = ""
+                else:
+                    return None
+        
         try:
             freq_khz = float(re.sub(r'[^0-9.]', '', freq_s))
-        except Exception:
+        except (ValueError, TypeError):
             return None
+        
+        if not dx_call or len(dx_call) < 3:
+            return None
+        
         band = freq2band(freq_khz) or "?"
         country, _ = DXCC.lookup(dx_call)
+        
         # Detectare mod din comentariu
         mode = "SSB"
-        for mo in ["CW", "FT8", "FT4", "RTTY", "PSK31", "SSB", "AM", "FM", "DIGI"]:
-            if mo in comment.upper():
-                mode = mo; break
+        comment_upper = comment.upper()
+        for mo in ["FT8", "FT4", "CW", "RTTY", "PSK31", "SSB", "AM", "FM", "DIGI", "USB", "LSB"]:
+            if mo in comment_upper:
+                mode = mo
+                break
+        
         return {
             "time": datetime.datetime.utcnow().strftime("%H:%M"),
             "dx": dx_call.upper(),
@@ -3157,7 +3251,7 @@ class DXClusterWindow(tk.Toplevel):
             "mode": mode,
             "country": country,
             "comment": comment.strip()[:40],
-            "spotter": spotter.upper()
+            "spotter": spotter.upper() if spotter else ""
         }
 
     def _tick(self):
@@ -3165,7 +3259,6 @@ class DXClusterWindow(tk.Toplevel):
             if not self.winfo_exists(): return
         except Exception:
             return
-        # Procesează coada
         processed = 0
         while self._queue and processed < 20:
             item = self._queue.popleft()
@@ -3231,11 +3324,11 @@ class DXClusterWindow(tk.Toplevel):
 
 
 # ═══════════════════════════════════════════════════════════
-# QSO RATE STATISTICS — Statistici și grafic QSO/h
+# QSO RATE STATISTICS
 # ═══════════════════════════════════════════════════════════
 
 class RateStatsWindow(tk.Toplevel):
-    """Statistici live QSO Rate — grafic QSO/h pe ore, top DXCC, top bandă."""
+    """Statistici live QSO Rate."""
 
     def __init__(self, parent, log_getter, cfg_getter):
         super(RateStatsWindow, self).__init__(parent)
@@ -3257,11 +3350,9 @@ class RateStatsWindow(tk.Toplevel):
         tk.Button(hdr, text="↺ Refresh", command=self._refresh,
                   bg=TH["accent"], fg="white", font=("Consolas", 10)).pack(side="right", padx=6)
 
-        # Main frame
         mf = tk.Frame(self, bg=TH["bg"])
         mf.pack(fill="both", expand=True, padx=6, pady=4)
 
-        # Left: canvas grafic
         lf = tk.Frame(mf, bg=TH["bg"])
         lf.pack(side="left", fill="both", expand=True)
         tk.Label(lf, text="QSO / oră", bg=TH["bg"], fg=TH["fg"],
@@ -3270,7 +3361,6 @@ class RateStatsWindow(tk.Toplevel):
                                        highlightbackground=TH["accent"], width=480, height=260)
         self._rate_canvas.pack(fill="both", expand=True, pady=4)
 
-        # Right: tabele
         rf = tk.Frame(mf, bg=TH["bg"], width=320)
         rf.pack(side="right", fill="y", padx=(6,0))
         rf.pack_propagate(False)
@@ -3295,7 +3385,6 @@ class RateStatsWindow(tk.Toplevel):
         self._band_tree.column("pct", width=50, anchor="center")
         self._band_tree.pack(fill="x")
 
-        # Bottom stats
         self._stats_frame = tk.Frame(self, bg=TH["bg"])
         self._stats_frame.pack(fill="x", padx=6, pady=4)
         self._stat_labels = {}
@@ -3322,7 +3411,6 @@ class RateStatsWindow(tk.Toplevel):
         if not log:
             return
 
-        # Calculează QSO/oră
         hour_counts = Counter()
         for q in log:
             try:
@@ -3332,16 +3420,13 @@ class RateStatsWindow(tk.Toplevel):
             except Exception:
                 pass
 
-        # Desenează graficul
         self._draw_rate_chart(hour_counts)
 
-        # DXCC
         dxcc_counts = Counter(DXCC.lookup(q.get("c",""))[0] for q in log)
         for row in self._dxcc_tree.get_children(): self._dxcc_tree.delete(row)
         for country, cnt in dxcc_counts.most_common(20):
             self._dxcc_tree.insert("", "end", values=(country, cnt))
 
-        # Per bandă
         band_counts = Counter(q.get("b", "?") for q in log)
         total = max(1, len(log))
         for row in self._band_tree.get_children(): self._band_tree.delete(row)
@@ -3351,12 +3436,10 @@ class RateStatsWindow(tk.Toplevel):
                 pct = f"{100*cnt//total}%"
                 self._band_tree.insert("", "end", values=(band, cnt, pct))
 
-        # Stats
         unique_calls = len(set(q.get("c","") for q in log))
         dxcc_count = len(set(DXCC.prefix(q.get("c","")) for q in log))
         top_band = band_counts.most_common(1)[0][0] if band_counts else "—"
 
-        # Rate ultima oră
         now = datetime.datetime.utcnow()
         rate_1h = sum(1 for q in log if self._qso_in_window(q, now, 60))
         rate_last_qso = "—"
@@ -3402,13 +3485,15 @@ class RateStatsWindow(tk.Toplevel):
             c.create_text(cw//2, ch//2, text="Nu există date", fill=TH["fg"],
                           font=("Consolas", 11)); return
 
-        sorted_hours = sorted(hour_counts.keys())[-24:]  # ultimele 24h
-        max_val = max(hour_counts[h] for h in sorted_hours) or 1
+        sorted_hours = sorted(hour_counts.keys())[-24:]
+        values = [hour_counts[h] for h in sorted_hours]
+        max_val = max(values) if values else 1
+        if max_val < 1:
+            max_val = 1
         n = len(sorted_hours)
         if n == 0: return
         bar_w = max(4, (cw - pad_l - pad_r) // n - 2)
 
-        # Gridlines
         for i in range(5):
             y = pad_t + (ch - pad_t - pad_b) * i // 4
             val = max_val * (4 - i) // 4
@@ -3416,17 +3501,15 @@ class RateStatsWindow(tk.Toplevel):
             c.create_text(pad_l - 4, y, text=str(val), fill=TH["fg"],
                           font=("Consolas", 7), anchor="e")
 
-        # Bars
         for i, hour in enumerate(sorted_hours):
             x = pad_l + i * (bar_w + 2)
             val = hour_counts[hour]
-            bar_h = int((ch - pad_t - pad_b) * val / max_val)
+            bar_h = int((ch - pad_t - pad_b) * val / max_val) if max_val > 0 else 0
             y0 = ch - pad_b - bar_h
-            col = TH.get("cyan", "#00aaff") if val == max(hour_counts[h] for h in sorted_hours) else TH["accent"]
+            col = TH.get("cyan", "#00aaff") if val == max(values) else TH["accent"]
             c.create_rectangle(x, y0, x + bar_w, ch - pad_b, fill=col, outline="")
             c.create_text(x + bar_w//2, y0 - 8, text=str(val),
                           fill=TH["fg"], font=("Consolas", 7))
-            # Label oră
             lbl = hour[-2:] + "h"
             c.create_text(x + bar_w//2, ch - pad_b + 12, text=lbl,
                           fill=TH["fg"], font=("Consolas", 7), angle=0)
@@ -3435,17 +3518,17 @@ class RateStatsWindow(tk.Toplevel):
         try:
             if self.winfo_exists():
                 self._refresh()
-                self.after(60000, self._schedule)  # refresh la 60s
+                self.after(60000, self._schedule)
         except Exception:
             pass
 
 
 # ═══════════════════════════════════════════════════════════
-# LIVE SCORE PANEL — Scor contest în timp real
+# LIVE SCORE PANEL
 # ═══════════════════════════════════════════════════════════
 
 class LiveScorePanel(tk.Toplevel):
-    """Panou scor concurs live — QSO/h, multiplicatori, DXCC, bandă."""
+    """Panou scor concurs live."""
 
     def __init__(self, parent, log_getter, cfg_getter, contest_getter):
         super(LiveScorePanel, self).__init__(parent)
@@ -3468,7 +3551,6 @@ class LiveScorePanel(tk.Toplevel):
         mf = tk.Frame(self, bg=TH["bg"], padx=12, pady=8)
         mf.pack(fill="both", expand=True)
 
-        # Score principal
         self._score_lbl = tk.Label(mf, text="0", bg=TH["bg"], fg=TH["gold"],
                                     font=("Consolas", 36, "bold"))
         self._score_lbl.pack(pady=(10, 0))
@@ -3478,7 +3560,6 @@ class LiveScorePanel(tk.Toplevel):
         sep = tk.Frame(mf, bg=TH["accent"], height=1)
         sep.pack(fill="x", pady=8)
 
-        # Grid de statistici
         stats_grid = tk.Frame(mf, bg=TH["bg"])
         stats_grid.pack(fill="x")
 
@@ -3508,13 +3589,11 @@ class LiveScorePanel(tk.Toplevel):
         sep2 = tk.Frame(mf, bg=TH["accent"], height=1)
         sep2.pack(fill="x", pady=8)
 
-        # Per bandă progress bars
         tk.Label(mf, text="QSO per bandă:", bg=TH["bg"], fg=TH["fg"],
                  font=("Consolas", 9, "bold")).pack(anchor="w")
         self._band_frame = tk.Frame(mf, bg=TH["bg"])
         self._band_frame.pack(fill="x", pady=4)
 
-        # Last update
         self._upd_lbl = tk.Label(self, text="", bg=TH["bg"], fg=TH["fg"],
                                   font=("Consolas", 8))
         self._upd_lbl.pack(side="bottom", anchor="e", padx=6, pady=2)
@@ -3529,11 +3608,9 @@ class LiveScorePanel(tk.Toplevel):
         cc = self.contest_getter()
         now = datetime.datetime.utcnow()
 
-        # Score calcul
         qp, mc, tot = Score.total(log, cc, cfg)
         self._score_lbl.config(text=str(tot))
 
-        # Stats
         unique_calls = len(set(q.get("c","") for q in log))
         countries = len(set(DXCC.lookup(q.get("c",""))[0] for q in log if q.get("c")))
         dxcc_count = len(set(DXCC.prefix(q.get("c","")) for q in log))
@@ -3547,7 +3624,7 @@ class LiveScorePanel(tk.Toplevel):
                 return False
 
         rate_1h = sum(1 for q in log if _in_window(q, 60))
-        rate_10 = sum(1 for q in log if _in_window(q, 10)) * 6  # → /h
+        rate_10 = sum(1 for q in log if _in_window(q, 10)) * 6
 
         vals = {
             "qso_total": str(len(log)),
@@ -3563,7 +3640,6 @@ class LiveScorePanel(tk.Toplevel):
             if k in self._stat_widgets:
                 self._stat_widgets[k].config(text=v)
 
-        # Band bars
         for w in self._band_frame.winfo_children(): w.destroy()
         band_counts = Counter(q.get("b","?") for q in log)
         total_q = max(1, len(log))
@@ -3590,7 +3666,7 @@ class LiveScorePanel(tk.Toplevel):
         try:
             if self.winfo_exists():
                 self._refresh()
-                self.after(15000, self._schedule)  # refresh la 15s
+                self.after(15000, self._schedule)
         except Exception:
             pass
 
@@ -3612,7 +3688,6 @@ class App(tk.Tk):
         if not isinstance(self.log,list): self.log=[]
         L.s(self.cfg.get("lang","ro")); self.edit_idx=None; self.ent={}; self.serial=len(self.log)+1; self.undo_stack=deque(maxlen=50)
         self._apply_theme_from_cfg()
-        # CAT: reconnect if was enabled
         CAT.on_update = self._on_cat_update
         if self.cfg.get("cat_enabled") and self.cfg.get("cat_port"):
             CAT.connect(self.cfg)
@@ -3624,12 +3699,10 @@ class App(tk.Tk):
         self.bind('<Control-z>',lambda e:self._undo()); self.bind('<Control-f>',lambda e:self._search_dlg())
         self.bind('<F2>',self._cycle_band); self.bind('<F3>',self._cycle_mode)
         self._tick_clock(); self._tick_save()
-        # Prima utilizare — arata dialog configurare
         if self.cfg.get("first_run", True):
             self.after(200, self._first_run_setup)
 
     def _first_run_setup(self):
-        """Apare automat la primul start — cere indicativ si informatii."""
         d = FirstRunDialog(self, self.cfg)
         self.wait_window(d)
         if d.result:
@@ -3643,7 +3716,6 @@ class App(tk.Tk):
             )
 
     def _cat_quick_connect(self):
-        """Conectare rapida din meniu cu setarile salvate."""
         if not self.cfg.get("cat_port") and not self.cfg.get("cat_protocol","").startswith("Hamlib"):
             messagebox.showinfo("CAT", "Configureaza portul COM mai intai: Meniu CAT -> Setari CAT")
             self._cat_dlg(); return
@@ -3659,7 +3731,6 @@ class App(tk.Tk):
             self.cat_lbl.config(text="CAT: OFF", fg=TH["err"])
 
     def _apply_theme_quick(self, theme_name):
-        """Aplica o tema direct din meniu fara dialog."""
         self.cfg["theme"] = theme_name
         self.cfg["custom_colors"] = {}
         DM.save("config.json", self.cfg)
@@ -3674,33 +3745,28 @@ class App(tk.Tk):
         TH.update(base)
 
     def _on_cat_update(self, freq_khz, mode):
-        """Callback din thread CAT — actualizează câmpurile freq și mode."""
         def _upd():
             try:
                 if not self.winfo_exists(): return
-                # Freq
                 if freq_khz and self.ent.get("freq") is not None:
                     cur = self.ent["freq"].get().strip()
                     if cur != freq_khz:
                         self.ent["freq"].delete(0,"end")
                         self.ent["freq"].insert(0, freq_khz)
-                        self._on_freq_out()   # auto-setează banda
-                # Mode
+                        self._on_freq_out()
                 if mode and self.ent.get("mode") is not None:
                     cc = self._cc()
                     allowed = cc.get("allowed_modes", MODES_ALL)
-                    # SSB fallback
                     m = mode if mode in allowed else ("SSB" if "SSB" in allowed else None)
                     if m and self.ent["mode"].get() != m:
                         self.ent["mode"].set(m)
                         self._on_mode_change()
-                # Update CAT indicator
                 if self.cat_lbl:
                     self.cat_lbl.config(
                         text=f"📡 {freq_khz} kHz  {mode}",
                         fg=TH["ok"])
             except: pass
-        self.after(0, _upd)   # thread-safe: scheduleaza pe main thread
+        self.after(0, _upd)
 
     def _cat_dlg(self):
         d = CATSettingsDialog(self, self.cfg, CAT)
@@ -3777,7 +3843,6 @@ class App(tk.Tk):
         tm.add_command(label=L.t("imp_cab"),command=self._import_cabrillo); tm.add_separator()
         tm.add_command(label=L.t("print_log"),command=self._print_log); tm.add_command(label=L.t("verify"),command=self._verify_hash); tm.add_separator()
         tm.add_command(label=L.t("clear_log"),command=self._clear_log)
-        # ─── Meniu v17.1: Instrumente noi ───
         v171m = tk.Menu(mb, tearoff=0); mb.add_cascade(label="📡 v17.1", menu=v171m)
         v171m.add_command(label="📡 Band Map", command=self._open_bandmap)
         v171m.add_command(label="📡 DX Cluster", command=self._open_cluster)
@@ -3827,7 +3892,6 @@ class App(tk.Tk):
         self.ent["call"]=tk.Entry(cf,width=15,bg=TH["entry_bg"],fg=TH["gold"],font=("Consolas",self.fs+2,"bold"),insertbackground=TH["fg"],justify="center")
         self.ent["call"].pack(ipady=3); self.ent["call"].bind("<KeyRelease>",self._on_call_key)
         self.wb_lbl=tk.Label(cf,text="",bg=TH["bg"],fg=TH["err"],font=("Consolas",9)); self.wb_lbl.pack()
-        # Buton callbook inline sub câmpul call
         tk.Button(cf,text="🌐 Callbook",
                   command=self._open_callbook,
                   bg="#1a237e",fg="white",
@@ -3921,9 +3985,45 @@ class App(tk.Tk):
         for idx,(_,k) in enumerate(items): self.tree.move(k,"",idx)
 
     def _build_btns(self):
-        bb=tk.Frame(self,bg=TH["bg"],pady=6); bb.pack(fill="x",padx=10)
-        for txt,cmd,col in [(L.t("settings"),self._settings,TH["warn"]),(L.t("contests"),self._mgr,"#E91E63"),("📡 CAT",self._cat_dlg,"#1a5276"),("📝 Log Nou",self._new_log_dlg,"#2e7d32"),("🎨 Teme",self._theme_dlg,"#6a1b9a"),(L.t("stats"),self._stats,"#3F51B5"),(L.t("validate"),self._validate,TH["ok"]),(L.t("export"),self._export_dlg,"#9C27B0"),(L.t("import_log"),self._import_menu,"#FF5722"),(L.t("undo"),self._undo,"#795548"),(L.t("backup"),self._bak,"#607D8B"),(L.t("search"),self._search_dlg,"#00796B"),(L.t("timer"),self._timer_dlg,"#004D40"),("📝 Log Editor",self._open_log_editor,"#1B5E20"),("🌐 Callbook",self._open_callbook,"#1a237e")]:
-            tk.Button(bb,text=txt,command=cmd,bg=col,fg="white",font=("Consolas",10),width=11).pack(side="left",padx=2)
+        """Bara de jos cu butoare - layout corectat"""
+        bb=tk.Frame(self,bg=TH["bg"],pady=6)
+        bb.pack(fill="x",padx=10)
+        
+        # Define buttons in two rows for better layout
+        row1_buttons = [
+            (L.t("settings"),self._settings,TH["warn"]),
+            (L.t("contests"),self._mgr,"#E91E63"),
+            ("📡 CAT",self._cat_dlg,"#1a5276"),
+            ("📝 Log Nou",self._new_log_dlg,"#2e7d32"),
+            ("🎨 Teme",self._theme_dlg,"#6a1b9a"),
+            (L.t("stats"),self._stats,"#3F51B5"),
+            (L.t("validate"),self._validate,TH["ok"]),
+            (L.t("export"),self._export_dlg,"#9C27B0"),
+        ]
+        
+        row2_buttons = [
+            (L.t("import_log"),self._import_menu,"#FF5722"),
+            (L.t("undo"),self._undo,"#795548"),
+            (L.t("backup"),self._bak,"#607D8B"),
+            (L.t("search"),self._search_dlg,"#00796B"),
+            (L.t("timer"),self._timer_dlg,"#004D40"),
+            ("📝 Log Editor",self._open_log_editor,"#1B5E20"),
+            ("🌐 Callbook",self._open_callbook,"#1a237e"),
+        ]
+        
+        # Row 1
+        row1 = tk.Frame(bb, bg=TH["bg"])
+        row1.pack(fill="x", pady=1)
+        for txt,cmd,col in row1_buttons:
+            tk.Button(row1,text=txt,command=cmd,bg=col,fg="white",
+                      font=("Consolas",9),width=11).pack(side="left",padx=1)
+        
+        # Row 2
+        row2 = tk.Frame(bb, bg=TH["bg"])
+        row2.pack(fill="x", pady=1)
+        for txt,cmd,col in row2_buttons:
+            tk.Button(row2,text=txt,command=cmd,bg=col,fg="white",
+                      font=("Consolas",9),width=11).pack(side="left",padx=1)
 
     def _refresh(self):
         if not self.tree: return
@@ -3999,8 +4099,6 @@ class App(tk.Tk):
         is_new_mult = Score.is_new_mult(self.log, qp, cc)
         if is_new_mult:
             self._mult_alert(qp)
-        elif self._sounds():
-            pass  # sunet normal la QSO — optional
         q={"c":call,"b":band,"m":mode,"s":self.ent["rst_s"].get().strip() or "59","r":self.ent["rst_r"].get().strip() or "59",
            "n":self.ent["note"].get().strip(),"d":ds,"t":ts,"f":self.ent["freq"].get().strip()}
         if "ss" in self.ent: q["ss"]=self.ent["ss"].get().strip()
@@ -4011,12 +4109,10 @@ class App(tk.Tk):
         else: self.log.insert(0,q); self.undo_stack.append(("add",0,q)); self.serial+=1
         self._clr(); self._refresh(); DM.save_log(self._cid(),self.log)
 
-    # ── v17.0: Only clear call and note — keep freq, band, mode, RST ──
     def _clr(self):
         """Clear only call and note fields. Frequency, band, mode and RST persist."""
         self.ent["call"].delete(0, "end")
         self.ent["note"].delete(0, "end")
-        # freq, band, mode, rst_s, rst_r — DO NOT CLEAR
         if "ss" in self.ent:
             self.ent["ss"].delete(0, "end")
             self.ent["ss"].insert(0, str(self.serial))
@@ -4031,7 +4127,6 @@ class App(tk.Tk):
         self.ent["call"].delete(0, "end")
         self.ent["note"].delete(0, "end")
         self.ent["freq"].delete(0, "end")
-        # Reset RST to defaults based on current mode
         mode = self.ent["mode"].get()
         rst = RST_DEFAULTS.get(mode, "59")
         for k in ("rst_s", "rst_r"):
@@ -4097,7 +4192,6 @@ class App(tk.Tk):
             if b and b in self._cc().get("allowed_bands",BANDS_ALL): self.ent["band"].set(b)
 
     def _send_freq_to_radio(self):
-        """Enter în câmpul freq → trimite frecvența spre radio via CAT."""
         f = self.ent["freq"].get().strip()
         if f and CAT.connected:
             CAT.set_freq(f)
@@ -4181,17 +4275,81 @@ class App(tk.Tk):
         if d.result: self.contests=d.result; DM.save("contests.json",self.contests); self._rebuild()
 
     def _about(self):
-        d=tk.Toplevel(self); d.title(L.t("about")); d.geometry("460x280"); d.configure(bg=TH["bg"]); d.transient(self)
-        tk.Label(d,text="📻 YO Log PRO v17.0 — CAT Edition",bg=TH["bg"],fg=TH["accent"],font=("Consolas",16,"bold")).pack(pady=12)
-        tk.Label(d,text=L.t("credits"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(pady=8)
-        tk.Label(d,text=L.t("usage"),bg=TH["bg"],fg=TH["fg"],font=("Consolas",9)).pack(pady=6)
-        tk.Button(d,text=L.t("close"),command=d.destroy,bg=TH["accent"],fg="white",width=12).pack(pady=10); center_dialog(d,self)
+        """Pagina Despre - formatare corectă"""
+        d=tk.Toplevel(self)
+        d.title(L.t("about"))
+        d.geometry("500x350")
+        d.configure(bg=TH["bg"])
+        d.transient(self)
+        d.grab_set()
+        
+        # Main frame with padding
+        main_frame = tk.Frame(d, bg=TH["bg"], padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+        
+        # Title
+        tk.Label(main_frame, 
+                 text="📻 YO Log PRO v17.1 — CAT Edition",
+                 bg=TH["bg"], fg=TH["accent"],
+                 font=("Consolas", 16, "bold")).pack(pady=(0, 15))
+        
+        # Separator
+        tk.Frame(main_frame, bg=TH["accent"], height=2).pack(fill="x", pady=10)
+        
+        # Developer info
+        info_frame = tk.Frame(main_frame, bg=TH["bg"])
+        info_frame.pack(fill="x", pady=10)
+        
+        tk.Label(info_frame,
+                 text="Developed by:",
+                 bg=TH["bg"], fg=TH["fg"],
+                 font=("Consolas", 10)).pack(anchor="w")
+        tk.Label(info_frame,
+                 text="Ardei Constantin-Cătălin (YO8ACR)",
+                 bg=TH["bg"], fg=TH["gold"],
+                 font=("Consolas", 12, "bold")).pack(anchor="w", pady=(2, 10))
+        
+        tk.Label(info_frame,
+                 text="Email: yo8acr@gmail.com",
+                 bg=TH["bg"], fg=TH["cyan"],
+                 font=("Consolas", 10)).pack(anchor="w")
+        
+        tk.Label(info_frame,
+                 text="GitHub: github.com/acc1311/YOLogPRO_v17.1",
+                 bg=TH["bg"], fg=TH["cyan"],
+                 font=("Consolas", 10)).pack(anchor="w", pady=(5, 10))
+        
+        # Location
+        tk.Label(info_frame,
+                 text="Location: Târgu Neamț, Neamț, Romania",
+                 bg=TH["bg"], fg=TH["fg"],
+                 font=("Consolas", 10)).pack(anchor="w", pady=(5, 15))
+        
+        # Separator
+        tk.Frame(main_frame, bg=TH["warn"], height=1).pack(fill="x", pady=10)
+        
+        # Keyboard shortcuts
+        tk.Label(main_frame,
+                 text="Keyboard Shortcuts:",
+                 bg=TH["bg"], fg=TH["warn"],
+                 font=("Consolas", 10, "bold")).pack(anchor="w", pady=(5, 5))
+        tk.Label(main_frame,
+                 text="Ctrl+F = Caută   Ctrl+Z = Undo   Ctrl+S = Save\nF2 = Bandă++   F3 = Mod++   Enter = LOG",
+                 bg=TH["bg"], fg=TH["fg"],
+                 font=("Consolas", 9)).pack(anchor="w")
+        
+        # Close button
+        tk.Button(main_frame, text=L.t("close"), command=d.destroy,
+                  bg=TH["accent"], fg="white",
+                  font=("Consolas", 11), width=15).pack(pady=20)
+        
+        center_dialog(d, self)
 
     def _settings(self):
         d=tk.Toplevel(self); d.title(L.t("settings")); d.geometry("420x560"); d.configure(bg=TH["bg"]); d.transient(self)
         eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":self.fn,"insertbackground":TH["fg"]}
         fields=[("call",L.t("call"),self.cfg.get("call","")),("loc",L.t("locator"),self.cfg.get("loc","")),
-                ("jud",L.t("county"),self.cfg.get("jud","")),("addr",L.t("address"),self.cfg.get("addr","")),
+                ("jud",L.t("county"),self.cfg.get("jud","")),("addr",L.t("address"),self.cfg.get("addr","Târgu Neamț, Neamț, Romania")),
                 ("op_name",L.t("op"),self.cfg.get("op_name","")),("power",L.t("power"),self.cfg.get("power","100")),
                 ("email",L.t("email_l"),self.cfg.get("email","")),("soapbox",L.t("soapbox_l"),self.cfg.get("soapbox","73 GL")),
                 ("fs",L.t("font_size"),str(self.cfg.get("fs",11)))]
@@ -4276,7 +4434,7 @@ class App(tk.Tk):
             nm=cc.get("cabrillo_name","") or cc.get("name_en",cc.get("name_ro","CONTEST"))
             pw=int(self.cfg.get("power","100")); cat_power="QRP" if pw<=5 else ("LOW" if pw<=100 else "HIGH")
             ef=cc.get("exchange_format","none")
-            lines=["START-OF-LOG: 3.0",f"CONTEST: {nm}",f"CALLSIGN: {my}",f"GRID-LOCATOR: {self.cfg.get('loc','')}","CATEGORY-OPERATOR: SINGLE-OP","CATEGORY-BAND: ALL",f"CATEGORY-POWER: {cat_power}","CATEGORY-MODE: MIXED",f"NAME: {self.cfg.get('op_name','')}",f"ADDRESS: {self.cfg.get('addr','')}","SOAPBOX: Logged with YO Log PRO v17.1",f"SOAPBOX: {self.cfg.get('soapbox','73 GL')}","CREATED-BY: YO Log PRO v17.0"]
+            lines=["START-OF-LOG: 3.0",f"CONTEST: {nm}",f"CALLSIGN: {my}",f"GRID-LOCATOR: {self.cfg.get('loc','')}","CATEGORY-OPERATOR: SINGLE-OP","CATEGORY-BAND: ALL",f"CATEGORY-POWER: {cat_power}","CATEGORY-MODE: MIXED",f"NAME: {self.cfg.get('op_name','')}",f"ADDRESS: {self.cfg.get('addr','')}","SOAPBOX: Logged with YO Log PRO v17.1",f"SOAPBOX: {self.cfg.get('soapbox','73 GL')}","CREATED-BY: YO Log PRO v17.1"]
             for q in self.log:
                 freq=q.get("f","") or str(BAND_FREQ.get(q.get("b",""),0))
                 try: freq=str(int(float(freq)))
@@ -4394,7 +4552,7 @@ class App(tk.Tk):
         if not self._check_before_export(): return
         try:
             my=self.cfg.get("call","NOCALL"); cc=self._cc(); nm=cc.get("name_"+L.g(),cc.get("name_ro","?"))
-            lines=[f"{'='*90}",f"YO Log PRO v17.0 — {my} — {nm}",f"Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",f"{'='*90}",
+            lines=[f"{'='*90}",f"YO Log PRO v17.1 — {my} — {nm}",f"Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",f"{'='*90}",
                    f"{'Nr':<4} {'Call':<13} {'Freq':<8} {'Band':<6} {'Mode':<6} {'RSTt':<5} {'RSTr':<5} {'Note':<10} {'Country':<15} {'Date':<11} {'Time':<6} {'Pts':<5}",f"{'-'*90}"]
             for i,q in enumerate(self.log):
                 c,_=DXCC.lookup(q.get("c",""))
@@ -4420,10 +4578,7 @@ class App(tk.Tk):
             DM.save_log(self._cid(),self.log); DM.save("config.json",self.cfg); DM.save("contests.json",self.contests)
             DM.backup(self._cid(),self.log); self.destroy()
 
-    # ─── v17.1: Deschidere ferestre noi ─────────────────────────
-
     def _open_log_editor(self):
-        """Deschide editorul dedicat de log — fereastră separată completă."""
         LogEditorWindow(
             self,
             log_ref      = self.log,
@@ -4434,9 +4589,7 @@ class App(tk.Tk):
         )
 
     def _open_callbook(self, call=""):
-        """Deschide dialogul Callbook Lookup."""
         if not call:
-            # Încearcă să ia indicativul din câmpul activ
             try: call = self.ent.get("call","").get().strip().upper()
             except Exception: call = ""
         def _fill(data):
@@ -4447,13 +4600,10 @@ class App(tk.Tk):
         CallbookDialog(self, call=call, on_fill=_fill)
 
     def _open_bandmap(self):
-        """Deschide fereastra Band Map."""
         BandMapWindow(self, lambda: self.log, lambda: self.cfg)
 
     def _open_cluster(self):
-        """Deschide fereastra DX Cluster."""
         def on_spot(call, freq):
-            """Click pe spot → completare indicativ + frecvență în formular."""
             try:
                 if self.ent.get("call"):
                     self.ent["call"].delete(0, "end")
@@ -4468,15 +4618,12 @@ class App(tk.Tk):
         DXClusterWindow(self, on_spot=on_spot)
 
     def _open_live_score(self):
-        """Deschide panoul Scor Live."""
         LiveScorePanel(self, lambda: self.log, lambda: self.cfg, self._cc)
 
     def _open_rate_stats(self):
-        """Deschide fereastra Statistici Rate QSO."""
         RateStatsWindow(self, lambda: self.log, lambda: self.cfg)
 
     def _load_cty_dat(self):
-        """Încarcă un fișier cty.dat pentru DXCC extins."""
         fp = filedialog.askopenfilename(
             title="Selectați cty.dat",
             filetypes=[("CTY Database", "cty.dat"), ("All files", "*.*")])
@@ -4488,11 +4635,9 @@ class App(tk.Tk):
                 messagebox.showerror("CTY.dat", f"Eroare: {msg}")
 
     def _mult_alert(self, qso):
-        """Alertă audio + vizuală la multiplicator nou."""
         cc = self._cc()
         if not Score.is_new_mult(self.log, qso, cc):
             return
-        # Sunet alert
         if self.cfg.get("sounds", True):
             if HAS_SOUND:
                 try:
@@ -4502,7 +4647,6 @@ class App(tk.Tk):
                         time.sleep(0.08)
                 except Exception:
                     pass
-        # Flash vizual + mesaj
         mt = cc.get("multiplier_type", "none")
         n = qso.get("n","").upper().strip(); c = qso.get("c","").upper()
         mult_val = "?"
@@ -4511,8 +4655,6 @@ class App(tk.Tk):
         elif mt == "band": mult_val = qso.get("b","")
         try:
             if self.sc_lbl:
-                orig_bg = self.sc_lbl.cget("bg")
-                orig_fg = self.sc_lbl.cget("fg")
                 self.sc_lbl.config(text=f"✦ MULT NOU: {mult_val} ✦", fg=TH["gold"])
                 self.after(3000, lambda: self.sc_lbl.config(fg=TH["gold"]))
         except Exception:
