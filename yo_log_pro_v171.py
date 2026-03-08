@@ -1608,6 +1608,9 @@ class CATSettingsDialog(tk.Toplevel):
         self.grab_set()
         self._build()
         center_dialog(self, parent)
+        # Focus pe câmpul indicativ — după grab_set trebuie explicit
+        self.after(100, lambda: self._e["call"].focus_set())
+        self.after(120, lambda: self._e["call"].select_range(0, "end"))
         self._sched_refresh()
 
     def _build(self):
@@ -1887,6 +1890,9 @@ class ThemeDialog(tk.Toplevel):
         self.grab_set()
         self._build()
         center_dialog(self, parent)
+        # Focus pe câmpul indicativ — după grab_set trebuie explicit
+        self.after(100, lambda: self._e["call"].focus_set())
+        self.after(120, lambda: self._e["call"].select_range(0, "end"))
 
     def _build(self):
         lo = {"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}
@@ -1986,23 +1992,28 @@ class FirstRunDialog(tk.Toplevel):
         self.cfg = cfg
         self.result = None
         self.title("YO Log PRO v17.1 — Configurare initiala / First Setup")
-        self.geometry("520x640")
+        self.geometry("560x680")
         self.configure(bg=TH["bg"])
-        self.resizable(False, False)
+        self.resizable(True, True)
+        self.minsize(480, 580)
         self.transient(parent)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self._save)  # nu permite inchidere fara salvare
         self._build()
         center_dialog(self, parent)
+        # Focus pe câmpul indicativ — după grab_set trebuie explicit
+        self.after(150, self._focus_first)
 
     def _build(self):
         lo  = {"bg":TH["bg"], "fg":TH["fg"],   "font":("Consolas",11)}
         lob = {"bg":TH["bg"], "fg":TH["gold"],  "font":("Consolas",12,"bold")}
         lo9 = {"bg":TH["bg"], "fg":TH["warn"],  "font":("Consolas",9)}
-        eo  = {"bg":TH["entry_bg"], "fg":TH["gold"], "font":("Consolas",12,"bold"),
-               "insertbackground":TH["fg"], "justify":"center"}
-        eon = {"bg":TH["entry_bg"], "fg":TH["fg"],   "font":("Consolas",11),
-               "insertbackground":TH["fg"]}
+        eo  = {"bg":TH["entry_bg"], "fg":TH["gold"], "font":("Consolas",13,"bold"),
+               "insertbackground":"white", "justify":"center",
+               "relief":"solid", "bd":2, "highlightthickness":2,
+               "highlightcolor":TH["accent"], "highlightbackground":TH["entry_bg"]}
+        eon = {"bg":TH["entry_bg"], "fg":"white", "font":("Consolas",11),
+               "insertbackground":"white", "relief":"solid", "bd":1}
 
         # ── Banner ──
         banner = tk.Frame(self, bg=TH["header_bg"], pady=12)
@@ -2035,10 +2046,16 @@ class FirstRunDialog(tk.Toplevel):
             e = tk.Entry(gf, width=28, **entry_opts)
             e.insert(0, self.cfg.get(key, default))
             if upper:
-                e.bind("<KeyRelease>", lambda ev, en=e: (
-                    en.delete(0,"end"),
-                    en.insert(0, ev.widget.get().upper())
-                ) or None)
+                def _make_upper(en):
+                    def _upper_cb(ev):
+                        txt = en.get().upper()
+                        pos = en.index(tk.INSERT)
+                        en.delete(0, "end")
+                        en.insert(0, txt)
+                        try: en.icursor(min(pos, len(txt)))
+                        except Exception: pass
+                    en.bind("<KeyRelease>", _upper_cb)
+                _make_upper(e)
             e.grid(row=r*2, column=1, sticky="ew", pady=(6,0))
             if hint:
                 tk.Label(gf, text=hint, **lo9).grid(
@@ -2046,7 +2063,7 @@ class FirstRunDialog(tk.Toplevel):
             return e
 
         self._e = {}
-        self._e["call"]    = row(0, "Indicativ / Callsign *", "call",    "YO8ACR",  eo,
+        self._e["call"]    = row(0, "Indicativ / Callsign *", "call",    "",  eo,
                                   "Indicativul tau de radioamator", upper=True)
         self._e["loc"]     = row(1, "Locator Maidenhead *",   "loc",     "KN37",    eo,
                                   "Grid locator (ex: KN37, JO21, ...)", upper=True)
@@ -2086,6 +2103,16 @@ class FirstRunDialog(tk.Toplevel):
                   bg=TH["ok"], fg="white",
                   font=("Consolas",12,"bold")).pack()
 
+    def _focus_first(self):
+        """Focus pe primul câmp obligatoriu."""
+        try:
+            e = self._e.get("call")
+            if e:
+                e.focus_set()
+                e.icursor("end")
+        except Exception:
+            pass
+
     def _save(self):
         call = self._e["call"].get().strip().upper()
         if not call:
@@ -2124,11 +2151,13 @@ class LogEditorWindow(tk.Toplevel):
         self._sort_rev  = False
 
         self.title("📝 Log Editor — YO Log PRO v17.1")
-        self.geometry("1150x640")
+        self.geometry("1200x680")
         self.configure(bg=TH["bg"])
         self.resizable(True, True)
         self._build()
         self._refresh()
+        # Focus pe câmpul indicativ
+        self.after(150, self._focus_call_field)
 
     # ── UI ──────────────────────────────────────────────────
     def _build(self):
@@ -2139,22 +2168,23 @@ class LogEditorWindow(tk.Toplevel):
                  bg=TH["header_bg"], fg=TH["gold"],
                  font=("Consolas", 12, "bold")).pack(side="left", padx=10)
 
-        btn_defs = [
-            ("💾 Salvează",    self._save_entry,  TH["ok"]),
-            ("🗑 Șterge",       self._delete_sel,  TH["err"]),
-            ("↩ Undo",          self._undo,         TH["warn"]),
-            ("🔍 Căutare",      self._do_search,    TH["accent"]),
-            ("🌐 Callbook",     self._callbook_sel, "#1a5276"),
-            ("↺ Refresh",       self._refresh,      TH["btn_bg"]),
-        ]
-        self._save_btn = None
-        for i, (lbl, cmd, col) in enumerate(btn_defs):
-            b = tk.Button(tb, text=lbl, command=cmd,
-                          bg=col, fg="white",
-                          font=("Consolas", 10), width=11)
-            b.pack(side="left", padx=2)
-            if i == 0:
-                self._save_btn = b
+        # Butoane toolbar
+        self._save_btn = tk.Button(tb, text="💾 Salvează",
+                                    command=self._save_entry,
+                                    bg=TH["ok"], fg="white",
+                                    font=("Consolas", 10, "bold"), width=12)
+        self._save_btn.pack(side="left", padx=2)
+
+        for lbl, cmd, col, w in [
+            ("🗑 Șterge",    self._delete_sel,  TH["err"],    10),
+            ("↩ Undo",       self._undo,         TH["warn"],   8),
+            ("🔍 Căutare",   self._do_search,    TH["accent"], 10),
+            ("🌐 Callbook",  self._callbook_sel, "#1a5276",    10),
+            ("↺ Refresh",    self._refresh,      TH["btn_bg"], 9),
+        ]:
+            tk.Button(tb, text=lbl, command=cmd,
+                      bg=col, fg="white",
+                      font=("Consolas", 10), width=w).pack(side="left", padx=2)
 
         # Status
         self._status = tk.Label(tb, text="", bg=TH["header_bg"],
@@ -2230,6 +2260,13 @@ class LogEditorWindow(tk.Toplevel):
         self._tree.bind("<Double-1>",  lambda e: self._load_into_form())
         self._tree.bind("<Delete>",    lambda e: self._delete_sel())
         self._tree.bind("<Button-3>",  self._ctx_menu)
+        # Scroll cu rotița mouse-ului
+        self._tree.bind("<MouseWheel>",
+            lambda e: self._tree.yview_scroll(int(-1*(e.delta/120)),"units"))
+        self._tree.bind("<Button-4>",
+            lambda e: self._tree.yview_scroll(-1,"units"))
+        self._tree.bind("<Button-5>",
+            lambda e: self._tree.yview_scroll(1,"units"))
 
         # ─ Edit Form — 2 rânduri grid clar ─
         ef = tk.LabelFrame(self,
@@ -2455,6 +2492,15 @@ class LogEditorWindow(tk.Toplevel):
             "t": _get("time"),
         }
 
+    def _focus_call_field(self):
+        """Focus pe câmpul Indicativ din form."""
+        try:
+            w = self._ent.get("call")
+            if w and hasattr(w, "focus_set"):
+                w.focus_set()
+        except Exception:
+            pass
+
     def _cancel_edit(self):
         self._edit_idx = None
         for w in self._ent.values():
@@ -2464,6 +2510,7 @@ class LogEditorWindow(tk.Toplevel):
             self._save_btn.config(text="💾 Salvează", bg=TH["ok"])
         if self._save_btn2:
             self._save_btn2.config(text="💾 Salvează", bg=TH["ok"])
+        self.after(50, self._focus_call_field)
 
     def _save_entry(self):
         q = self._get_form()
@@ -2636,6 +2683,9 @@ class CallbookDialog(tk.Toplevel):
         self.resizable(True, True)
         self._build()
         center_dialog(self, parent)
+        # Focus pe câmpul indicativ — după grab_set trebuie explicit
+        self.after(100, lambda: self._e["call"].focus_set())
+        self.after(120, lambda: self._e["call"].select_range(0, "end"))
         if call:
             self._call_e.delete(0, "end")
             self._call_e.insert(0, call.upper())
@@ -2745,6 +2795,8 @@ class CallbookDialog(tk.Toplevel):
             tab_txt, bg=TH["entry_bg"], fg=TH["ok"],
             font=("Consolas", 10), wrap="word", state="disabled")
         self._data_box.pack(fill="both", expand=True)
+        self._data_box.bind("<MouseWheel>",
+            lambda e: self._data_box.yview_scroll(int(-1*(e.delta/120)),"units"))
 
         # ─ Buttons ─
         bf = tk.Frame(self, bg=TH["bg"], pady=6)
@@ -3269,6 +3321,10 @@ class DXClusterWindow(tk.Toplevel):
         vsb.pack(side="right", fill="y")
         self._tree.bind("<Double-1>", self._on_spot_dbl)
         self._tree.bind("<Return>", self._on_spot_dbl)
+        self._tree.bind("<MouseWheel>",
+            lambda e: self._tree.yview_scroll(int(-1*(e.delta/120)),"units"))
+        self._tree.bind("<Button-4>", lambda e: self._tree.yview_scroll(-1,"units"))
+        self._tree.bind("<Button-5>", lambda e: self._tree.yview_scroll(1,"units"))
 
         # Raw log box
         rf = tk.Frame(self, bg=TH["bg"])
@@ -3875,9 +3931,49 @@ class App(tk.Tk):
         self.bind('<Control-z>',lambda e:self._undo()); self.bind('<Control-f>',lambda e:self._search_dlg())
         self.bind('<F2>',self._cycle_band); self.bind('<F3>',self._cycle_mode)
         self._tick_clock(); self._tick_save()
+        # Focus pe câmpul indicativ la pornire
+        self.after(100, self._focus_call)
+        # MouseWheel pe tree principal
+        self.bind_all("<MouseWheel>",   self._on_mousewheel)
+        self.bind_all("<Button-4>",     lambda e: self._on_mousewheel(e, +1))
+        self.bind_all("<Button-5>",     lambda e: self._on_mousewheel(e, -1))
         # Prima utilizare — arata dialog configurare
         if self.cfg.get("first_run", True):
             self.after(200, self._first_run_setup)
+
+    def _focus_call(self):
+        """Focus pe câmpul indicativ la pornire."""
+        try:
+            if self.ent.get("call"):
+                self.ent["call"].focus_set()
+                self.ent["call"].icursor("end")
+        except Exception:
+            pass
+
+    def _on_mousewheel(self, event, direction=None):
+        """Scroll cu rotița mouse-ului pe widget-ul activ sau pe tree."""
+        widget = event.widget
+        # Detectăm direcția
+        if direction is not None:
+            delta = direction
+        else:
+            try:
+                delta = -1 if event.delta > 0 else 1
+            except Exception:
+                delta = -1
+        # Scroll pe Treeview principal
+        try:
+            if self.tree and widget in (self.tree, self):
+                self.tree.yview_scroll(delta, "units")
+                return
+        except Exception:
+            pass
+        # Scroll pe orice Treeview/Text/Canvas care are focus
+        try:
+            if hasattr(widget, 'yview_scroll'):
+                widget.yview_scroll(delta, "units")
+        except Exception:
+            pass
 
     def _first_run_setup(self):
         """Apare automat la primul start — cere indicativ si informatii."""
@@ -3989,9 +4085,9 @@ class App(tk.Tk):
     def _setup_win(self):
         self.title(L.t("app_title")); self.configure(bg=TH["bg"])
         geo=self.cfg.get("win_geo","")
-        try: self.geometry(geo if geo else "1220x760")
-        except: self.geometry("1220x760")
-        self.minsize(1000,640)
+        try: self.geometry(geo if geo else "1280x780")
+        except: self.geometry("1280x780")
+        self.minsize(1100,680)
 
     def _setup_style(self):
         self.fs=int(self.cfg.get("fs",11)); self.fn=("Consolas",self.fs); self.fb=("Consolas",self.fs,"bold")
@@ -4161,6 +4257,9 @@ class App(tk.Tk):
         sb=ttk.Scrollbar(tf,orient="vertical",command=self.tree.yview); self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left",fill="both",expand=True); sb.pack(side="right",fill="y")
         self.tree.bind("<Double-1>",lambda e:self._edit_sel()); self.tree.bind("<Button-3>",self._on_rclick)
+        self.tree.bind("<MouseWheel>",lambda e:self.tree.yview_scroll(int(-1*(e.delta/120)),"units"))
+        self.tree.bind("<Button-4>",lambda e:self.tree.yview_scroll(-1,"units"))
+        self.tree.bind("<Button-5>",lambda e:self.tree.yview_scroll(1,"units"))
         self._sort_col=None; self._sort_rev=False
 
     def _sort_tree(self,col):
@@ -4172,24 +4271,37 @@ class App(tk.Tk):
         for idx,(_,k) in enumerate(items): self.tree.move(k,"",idx)
 
     def _build_btns(self):
-        # Rândul 1 — butoane principale
-        bb1=tk.Frame(self,bg=TH["bg"],pady=2); bb1.pack(fill="x",padx=6)
-        row1=[(L.t("settings"),self._settings,TH["warn"]),(L.t("contests"),self._mgr,"#E91E63"),
-              ("📡 CAT",self._cat_dlg,"#1a5276"),("📝 Log Nou",self._new_log_dlg,"#2e7d32"),
-              ("🎨 Teme",self._theme_dlg,"#6a1b9a"),(L.t("stats"),self._stats,"#3F51B5"),
-              (L.t("validate"),self._validate,TH["ok"]),(L.t("export"),self._export_dlg,"#9C27B0")]
-        for txt,cmd,col in row1:
-            tk.Button(bb1,text=txt,command=cmd,bg=col,fg="white",
-                      font=("Consolas",9),width=10).pack(side="left",padx=2)
-        # Rândul 2 — utilitare + v17.1
-        bb2=tk.Frame(self,bg=TH["bg"],pady=2); bb2.pack(fill="x",padx=6)
-        row2=[(L.t("import_log"),self._import_menu,"#FF5722"),(L.t("undo"),self._undo,"#795548"),
-              (L.t("backup"),self._bak,"#607D8B"),(L.t("search"),self._search_dlg,"#00796B"),
-              (L.t("timer"),self._timer_dlg,"#004D40"),("📝 Log Editor",self._open_log_editor,"#1B5E20"),
-              ("🌐 Callbook",self._open_callbook,"#1a237e")]
-        for txt,cmd,col in row2:
-            tk.Button(bb2,text=txt,command=cmd,bg=col,fg="white",
-                      font=("Consolas",9),width=10).pack(side="left",padx=2)
+        """Bara de butoane — 2 rânduri, text complet vizibil, fără trunchiere."""
+        BFONT = ("Consolas", 9)
+        BPAD  = 2
+        def _btn(parent, text, cmd, color, w=9):
+            tk.Button(parent, text=text, command=cmd,
+                      bg=color, fg="white",
+                      font=BFONT, width=w,
+                      relief="raised", bd=1,
+                      activebackground=color,
+                      activeforeground="white").pack(side="left", padx=BPAD, pady=1)
+
+        # ── Rândul 1 ──
+        bb1 = tk.Frame(self, bg=TH["bg"]); bb1.pack(fill="x", padx=4, pady=(4,1))
+        _btn(bb1, "⚙ " + L.t("settings"),  self._settings,       TH["warn"],   w=10)
+        _btn(bb1, "🏆 " + L.t("contests"), self._mgr,             "#C2185B",    w=10)
+        _btn(bb1, "📡 CAT",                 self._cat_dlg,         "#1a5276",    w=8)
+        _btn(bb1, "📝 Log Nou",             self._new_log_dlg,     "#2e7d32",    w=9)
+        _btn(bb1, "🎨 Teme",                self._theme_dlg,       "#6a1b9a",    w=8)
+        _btn(bb1, "📊 " + L.t("stats"),    self._stats,           "#3F51B5",    w=10)
+        _btn(bb1, "✔ " + L.t("validate"),  self._validate,        TH["ok"],     w=10)
+        _btn(bb1, "📤 " + L.t("export"),   self._export_dlg,      "#9C27B0",    w=9)
+
+        # ── Rândul 2 ──
+        bb2 = tk.Frame(self, bg=TH["bg"]); bb2.pack(fill="x", padx=4, pady=(1,4))
+        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,   "#E64A19",    w=9)
+        _btn(bb2, "↩ " + L.t("undo"),        self._undo,          "#5D4037",    w=8)
+        _btn(bb2, "💾 " + L.t("backup"),     self._bak,           "#546E7A",    w=9)
+        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,    "#00796B",    w=9)
+        _btn(bb2, "⏱ Timer",                 self._timer_dlg,     "#004D40",    w=8)
+        _btn(bb2, "📝 Log Editor",            self._open_log_editor,"#1B5E20",   w=11)
+        _btn(bb2, "🌐 Callbook",              self._open_callbook,  "#1a237e",   w=10)
 
     def _refresh(self):
         if not self.tree: return
@@ -4290,7 +4402,7 @@ class App(tk.Tk):
             self.ent["sr"].delete(0, "end")
         if self.wb_lbl:
             self.wb_lbl.config(text="")
-        self.ent["call"].focus()
+        self.after(50, self._focus_call)
 
     def _full_clr(self):
         """Full reset — clears ALL fields including freq, band, mode, RST."""
@@ -4310,7 +4422,7 @@ class App(tk.Tk):
             self.ent["sr"].delete(0, "end")
         if self.wb_lbl:
             self.wb_lbl.config(text="")
-        self.ent["call"].focus()
+        self.after(50, self._focus_call)
 
     def _edit_sel(self):
         sel=self.tree.selection()
@@ -4424,6 +4536,11 @@ class App(tk.Tk):
         self.ent={}; self.info_lbl=self.sc_lbl=self.clk=self.rate_lbl=self.cat_lbl=None; self.led_c=self.led=self.st_lbl=self.wb_lbl=self.log_btn=None
         self.tree=self.ctx=self.fb_v=self.fm_v=None; self.cv=self.ccb=self.lang_v=self.man_v=self.cat_v=self.cou_v=None
         self._setup_style(); self._build_menu(); self._build_ui(); self._build_ctx(); self._refresh()
+        # Reface focus și mousewheel după rebuild
+        self.after(100, self._focus_call)
+        self.bind_all("<MouseWheel>",  self._on_mousewheel)
+        self.bind_all("<Button-4>",    lambda e: self._on_mousewheel(e, +1))
+        self.bind_all("<Button-5>",    lambda e: self._on_mousewheel(e, -1))
 
     def _tick_clock(self):
         try:
