@@ -7,10 +7,6 @@
 
 ## Rezumat modificări
 
-Aceste modificări **nu schimbă logica radio, scoringul, CAT sau niciun fișier de date** față de v17.1 original. Toate intervențiile sunt strict la nivelul interfeței grafice (Tkinter UI).
-
----
-
 ## 1. Funcție nouă — `_responsive_geometry()`
 
 **Locație în cod:** deasupra clasei `TimerDialog`
