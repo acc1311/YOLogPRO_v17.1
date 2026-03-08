@@ -1,6 +1,5 @@
 # YO Log PRO v17.1 — Modificări UI Scroll & Responsive
 
-**Fișier modificat:** `yo_log_pro_v171_scroll_v3.py`  
 **Bazat pe:** YO Log PRO v17.1 Full Edition — Ardei Constantin-Cătălin (YO8ACR)  
 **Modificări realizate de:** Patch UI — scroll bidirectional + geometrie responsivă  
 
