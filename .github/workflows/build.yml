@@ -17,9 +17,6 @@ on:
         required: false
         default: ""
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write
 
@@ -30,9 +27,9 @@ jobs:
     name: 🔍 Verificare sintaxa Python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5.4.0
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.8"
 
@@ -54,10 +51,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
 
       - name: Setup Python 3.8
-        uses: actions/setup-python@v5.4.0
+        uses: actions/setup-python@v6
         with:
           python-version: "3.8"
           cache: "pip"
