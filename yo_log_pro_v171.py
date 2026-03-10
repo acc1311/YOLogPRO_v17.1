@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -2439,20 +2440,27 @@ class LogEditorWindow(tk.Toplevel):
                 cal_win.destroy()
 
             _render()
-            # Poziționare lângă butonul 📅 (sub el)
+            # Poziționare corectă: withdraw → update → geometry → deiconify
+            cal_win.withdraw()
             cal_win.update_idletasks()
-            _cal_btn_ref = _d_inner.winfo_children()[-1]  # butonul 📅 din _d_inner
+            # Coordonatele butonului 📅 — folosim _d_inner, ultimul copil = butonul
+            _cal_btn_ref = _d_inner.winfo_children()[-1]
             bx = _cal_btn_ref.winfo_rootx()
             by = _cal_btn_ref.winfo_rooty()
             bh = _cal_btn_ref.winfo_height()
+            # Dacă bx/by sunt 0 (widget nerandată), fallback la centrul ferestrei părinte
+            if bx == 0 and by == 0:
+                bx = self.winfo_rootx() + self.winfo_width()  // 2
+                by = self.winfo_rooty() + self.winfo_height() // 2
             cw = cal_win.winfo_reqwidth()
             ch = cal_win.winfo_reqheight()
             sw = cal_win.winfo_screenwidth()
             sh = cal_win.winfo_screenheight()
-            cx = min(bx, sw-cw-10)
-            cy = by+bh+2
-            if cy+ch > sh-40: cy = by-ch-2
-            cal_win.geometry(f"+{cx}+{cy}")
+            cx = max(0, min(bx, sw - cw - 10))
+            cy = by + bh + 4
+            if cy + ch > sh - 48: cy = max(0, by - ch - 4)
+            cal_win.geometry(f"+{int(cx)}+{int(cy)}")
+            cal_win.deiconify()
 
         tk.Button(_d_inner, text="📅", command=_open_calendar,
                   bg=TH["accent"], fg="white",
@@ -4860,21 +4868,25 @@ class App(tk.Tk):
             cal_win.destroy()
 
         _render()
-        # ── Poziționare lângă butonul 📅, NU în centrul ecranului ──
+        # Poziționare corectă: withdraw → update → geometry → deiconify
+        cal_win.withdraw()
         cal_win.update_idletasks()
         btn_x = self._cal_btn_main.winfo_rootx()
         btn_y = self._cal_btn_main.winfo_rooty()
         btn_h = self._cal_btn_main.winfo_height()
+        # Fallback dacă butonul nu e încă randat
+        if btn_x == 0 and btn_y == 0:
+            btn_x = self.winfo_rootx() + self.winfo_width()  // 2
+            btn_y = self.winfo_rooty() + self.winfo_height() // 2
         cal_w = cal_win.winfo_reqwidth()
         cal_h = cal_win.winfo_reqheight()
-        # Apare sub buton, aliniat la stânga lui
         screen_w = cal_win.winfo_screenwidth()
         screen_h = cal_win.winfo_screenheight()
-        x = min(btn_x, screen_w - cal_w - 10)
-        y = btn_y + btn_h + 2
-        if y + cal_h > screen_h - 40:   # dacă iese jos, apare deasupra butonului
-            y = btn_y - cal_h - 2
-        cal_win.geometry(f"+{x}+{y}")
+        x = max(0, min(btn_x, screen_w - cal_w - 10))
+        y = btn_y + btn_h + 4
+        if y + cal_h > screen_h - 48: y = max(0, btn_y - cal_h - 4)
+        cal_win.geometry(f"+{int(x)}+{int(y)}")
+        cal_win.deiconify()
 
     def _tog_man(self):
         m=self.man_v.get()
