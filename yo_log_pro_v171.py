@@ -278,7 +278,6 @@ T = {
         "dur_h":"Durată (ore):","band_sum":"Benzi",
         "distance":"Dist","country":"Țara","utc":"UTC","autosaved":"Salvat",
         "sounds":"Sunete","en_sounds":"Activează sunete",
-        "en_scroll":"Activează scroll la ferestre popup",
         "qso_pts":"Puncte QSO","mult_c":"Multiplicatori","new_mult":"✦ MULT NOU!",
         "op":"Operator:","power":"Putere (W):","f_band":"Bandă:","f_mode":"Mod:",
         "all":"Toate","clear_log":"🗑 Golire log",
@@ -348,7 +347,6 @@ T = {
         "dur_h":"Duration (hours):","band_sum":"Bands",
         "distance":"Dist","country":"Country","utc":"UTC","autosaved":"Saved",
         "sounds":"Sounds","en_sounds":"Enable sounds",
-        "en_scroll":"Enable scroll on popup windows",
         "qso_pts":"QSO Points","mult_c":"Multipliers","new_mult":"✦ NEW MULT!",
         "op":"Operator:","power":"Power (W):","f_band":"Band:","f_mode":"Mode:",
         "all":"All","clear_log":"🗑 Clear log",
@@ -460,7 +458,7 @@ DEFAULT_CONTESTS = {
 DEFAULT_CFG = {
     "call":"YO8ACR","loc":"KN37","jud":"NT","addr":"",
     "cat":0,"fs":11,"contest":"simplu","county":"NT",
-    "lang":"ro","manual_dt":False,"sounds":True,"scroll_popups":True,
+    "lang":"ro","manual_dt":False,"sounds":True,
     "op_name":"","power":"100","win_geo":"",
     "email":"","soapbox":"73 GL",
     "cab2_exch_sent":"none","cab2_exch_rcvd":"log",
@@ -1186,7 +1184,7 @@ class ContestEditor(tk.Toplevel):
         super().__init__(parent)
         self.result=None; self.cid=cid; self.new=cid is None; self.all_c=all_c or {}
         self.d=copy.deepcopy(cdata) if cdata else {"name_ro":"","name_en":"","contest_type":"Simplu","cabrillo_name":"","categories":["Individual"],"scoring_mode":"none","points_per_qso":1,"min_qso":0,"allowed_bands":list(BANDS_ALL),"allowed_modes":list(MODES_ALL),"required_stations":[],"special_scoring":{},"use_serial":False,"use_county":False,"county_list":[],"multiplier_type":"none","band_points":{},"exchange_format":"none","is_default":False}
-        self.title(L.t("edit_c") if not self.new else L.t("add_c")); _responsive_geometry(self, parent, 720, 880); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set(); self._build(); center_dialog(self,parent)
+        self.title(L.t("edit_c") if not self.new else L.t("add_c")); self.geometry("720x880"); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set(); self._build(); center_dialog(self,parent)
 
     def _build(self):
         outer=tk.Frame(self,bg=TH["bg"]); outer.pack(fill="both",expand=True)
@@ -1281,7 +1279,7 @@ class ContestEditor(tk.Toplevel):
 class ContestMgr(tk.Toplevel):
     def __init__(self,parent,contests):
         super().__init__(parent); self.c=copy.deepcopy(contests); self.result=None
-        self.title(L.t("contest_mgr")); _responsive_geometry(self, parent, 780, 520); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
+        self.title(L.t("contest_mgr")); self.geometry("750x500"); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
         self._build(); self._fill(); center_dialog(self,parent)
     def _build(self):
         tb=tk.Frame(self,bg=TH["header_bg"],pady=6); tb.pack(fill="x")
@@ -1343,7 +1341,7 @@ class ContestMgr(tk.Toplevel):
 
 class SearchDialog(tk.Toplevel):
     def __init__(self,parent,log_data):
-        super().__init__(parent); self.log_data=log_data; self.title(L.t("search_t")); _responsive_geometry(self, parent, 620, 440); self.configure(bg=TH["bg"]); self.transient(parent)
+        super().__init__(parent); self.log_data=log_data; self.title(L.t("search_t")); self.geometry("600x420"); self.configure(bg=TH["bg"]); self.transient(parent)
         eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":("Consolas",11),"insertbackground":TH["fg"]}
         tk.Label(self,text=L.t("search_l"),bg=TH["bg"],fg=TH["fg"],font=("Consolas",11)).pack(anchor="w",padx=10,pady=(10,0))
         self._sv=tk.StringVar(); e=tk.Entry(self,textvariable=self._sv,width=40,**eo); e.pack(padx=10,pady=4,anchor="w"); e.bind("<KeyRelease>",self._search); e.focus()
@@ -1364,153 +1362,50 @@ class SearchDialog(tk.Toplevel):
         self._lbl.config(text=f"{L.t('results')}: {len(results)}")
         for nr,qso in results: self.tree.insert("","end",values=(nr,qso.get("c"),qso.get("b"),qso.get("m"),qso.get("d"),qso.get("n")))
 
-def _responsive_geometry(dialog, parent, ideal_w, ideal_h, max_pct_w=0.92, max_pct_h=0.88):
-    """Calculates and sets a dialog geometry that fits any screen resolution."""
-    try:
-        sw = dialog.winfo_screenwidth()
-        sh = dialog.winfo_screenheight()
-    except Exception:
-        sw, sh = 1366, 768
-    w = min(ideal_w, int(sw * max_pct_w))
-    h = min(ideal_h, int(sh * max_pct_h))
-    try:
-        px = parent.winfo_rootx()
-        py = parent.winfo_rooty()
-        pw = parent.winfo_width()
-        ph = parent.winfo_height()
-        x = px + (pw - w) // 2
-        y = py + (ph - h) // 2
-    except Exception:
-        x = (sw - w) // 2
-        y = (sh - h) // 2
-    x = max(0, min(x, sw - w))
-    y = max(0, min(y, sh - h))
-    dialog.geometry(f"{w}x{h}+{x}+{y}")
-    return w, h
-
-
-def _make_scrollable_dialog(dialog, parent_cfg=None):
-    """Wraps a Toplevel dialog in a fully scrollable Canvas+Frame (both axes).
-    Shift+MouseWheel = horizontal. MouseWheel = vertical.
-    If scroll_popups is False in config, returns the dialog itself."""
-    scroll_enabled = True
-    if parent_cfg is not None:
-        scroll_enabled = parent_cfg.get("scroll_popups", True)
-    if not scroll_enabled:
-        return dialog
-
-    outer = tk.Frame(dialog, bg=TH["bg"])
-    outer.pack(fill="both", expand=True)
-
-    vsb = ttk.Scrollbar(outer, orient="vertical")
-    vsb.pack(side="right", fill="y")
-    hsb = ttk.Scrollbar(outer, orient="horizontal")
-    hsb.pack(side="bottom", fill="x")
-
-    canvas = tk.Canvas(outer, bg=TH["bg"], highlightthickness=0,
-                        yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-    canvas.pack(side="left", fill="both", expand=True)
-    vsb.config(command=canvas.yview)
-    hsb.config(command=canvas.xview)
-
-    inner = tk.Frame(canvas, bg=TH["bg"])
-    win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-    def _update_scrollregion(e=None):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-
-    def _on_canvas_resize(e):
-        req_w = inner.winfo_reqwidth()
-        canvas.itemconfig(win_id, width=max(e.width, req_w))
-        _update_scrollregion()
-
-    inner.bind("<Configure>", _update_scrollregion)
-    canvas.bind("<Configure>", _on_canvas_resize)
-
-    def _vert(e):
-        if e.delta:
-            canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-        elif getattr(e, "num", 0) == 4:
-            canvas.yview_scroll(-1, "units")
-        elif getattr(e, "num", 0) == 5:
-            canvas.yview_scroll(1, "units")
-
-    def _horiz(e):
-        if e.delta:
-            canvas.xview_scroll(int(-1*(e.delta/120)), "units")
-        elif getattr(e, "num", 0) == 4:
-            canvas.xview_scroll(-1, "units")
-        elif getattr(e, "num", 0) == 5:
-            canvas.xview_scroll(1, "units")
-
-    for w in (canvas, inner):
-        w.bind("<MouseWheel>",       _vert)
-        w.bind("<Button-4>",         _vert)
-        w.bind("<Button-5>",         _vert)
-        w.bind("<Shift-MouseWheel>", _horiz)
-
-    def _bind_children(widget):
-        try:
-            widget.bind("<MouseWheel>",       _vert,  "+")
-            widget.bind("<Button-4>",         _vert,  "+")
-            widget.bind("<Button-5>",         _vert,  "+")
-            widget.bind("<Shift-MouseWheel>", _horiz, "+")
-            for child in widget.winfo_children():
-                _bind_children(child)
-        except Exception:
-            pass
-
-    dialog.after(200, lambda: _bind_children(inner))
-    return inner
-
-
 class TimerDialog(tk.Toplevel):
     """Timer concurs cu avertizare sonoră la 5/3/1 min și final."""
 
-    def __init__(self, parent, cfg=None):
+    def __init__(self, parent):
         super().__init__(parent)
-        self._cfg = cfg or {}
         self.title(L.t("timer_t"))
-        _responsive_geometry(self, parent, 360, 340)
+        self.geometry("360x300")
         self.configure(bg=TH["bg"])
         self.transient(parent)
-        self.resizable(True, True)
+        self.resizable(False, False)
         self._running = False
         self._end_time = None
         self._duration = 0
         self._elapsed_start = None
         self._elapsed_secs = 0
         self._alerted = set()   # seturi de alerte deja trase (5min,3min,1min,end)
-        self._container = _make_scrollable_dialog(self, self._cfg)
         self._build()
         self._tick()
         center_dialog(self, parent)
 
     def _build(self):
-        parent = self._container
         lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 11)}
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": ("Consolas", 11),
               "justify": "center", "insertbackground": TH["fg"], "width": 6}
 
         # ─ Durată ─
-        df = tk.Frame(parent, bg=TH["bg"]); df.pack(pady=(14, 4))
+        df = tk.Frame(self, bg=TH["bg"]); df.pack(pady=(14, 4))
         tk.Label(df, text="Ore:", **lo).pack(side="left", padx=4)
         self._h_e = tk.Entry(df, **eo); self._h_e.insert(0, "4"); self._h_e.pack(side="left")
         tk.Label(df, text="Min:", **lo).pack(side="left", padx=(10, 4))
         self._m_e = tk.Entry(df, **eo); self._m_e.insert(0, "0"); self._m_e.pack(side="left")
 
         # ─ Ceas scurs ─
-        self._time_lbl = tk.Label(parent, text="00:00:00",
+        self._time_lbl = tk.Label(self, text="00:00:00",
                                    bg=TH["bg"], fg=TH["gold"],
                                    font=("Consolas", 34, "bold"))
         self._time_lbl.pack(pady=6)
 
         # ─ Rămas ─
-        self._rem_lbl = tk.Label(parent, text="", **lo)
+        self._rem_lbl = tk.Label(self, text="", **lo)
         self._rem_lbl.pack()
 
         # ─ Avertizări sonore ─
-        af = tk.LabelFrame(parent, text=" 🔔 Avertizări sonore ",
+        af = tk.LabelFrame(self, text=" 🔔 Avertizări sonore ",
                            bg=TH["bg"], fg=TH["fg"],
                            font=("Consolas", 9))
         af.pack(fill="x", padx=12, pady=6)
@@ -1523,7 +1418,7 @@ class TimerDialog(tk.Toplevel):
                        font=("Consolas", 9)).pack(anchor="w", padx=6)
 
         # ─ Butoane ─
-        bf = tk.Frame(parent, bg=TH["bg"]); bf.pack(pady=8)
+        bf = tk.Frame(self, bg=TH["bg"]); bf.pack(pady=8)
         self._start_btn = tk.Button(bf, text=L.t("timer_start"),
                                      command=self._start,
                                      bg=TH["ok"], fg="white",
@@ -1638,7 +1533,7 @@ class TimerDialog(tk.Toplevel):
 
 class StatsWindow(tk.Toplevel):
     def __init__(self,parent,log_data,rules,cfg):
-        super().__init__(parent); self.title(L.t("stats")); _responsive_geometry(self, parent, 580, 540); self.configure(bg=TH["bg"]); self.transient(parent); center_dialog(self,parent)
+        super().__init__(parent); self.title(L.t("stats")); self.geometry("560x520"); self.configure(bg=TH["bg"]); self.transient(parent); center_dialog(self,parent)
         txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="word"); txt.pack(fill="both",expand=True,padx=10,pady=10)
         txt.tag_configure("h",foreground=TH["gold"],font=("Consolas",11,"bold")); txt.tag_configure("ok",foreground=TH["ok"]); txt.tag_configure("warn",foreground=TH["warn"])
         def w(t,tag=None): txt.insert("end",t,tag)
@@ -1663,7 +1558,7 @@ class StatsWindow(tk.Toplevel):
 
 class Cab2ConfigDialog(tk.Toplevel):
     def __init__(self,parent,cfg):
-        super().__init__(parent); self.result=None; self.cfg=cfg; self.title(L.t("cab2_config")); _responsive_geometry(self, parent, 440, 270); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
+        super().__init__(parent); self.result=None; self.cfg=cfg; self.title(L.t("cab2_config")); self.geometry("420x250"); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
         lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}; jud=cfg.get("county",cfg.get("jud","NT")); loc=cfg.get("loc","KN37")
         tk.Label(self,text=L.t("exch_sent_l"),**lo).pack(anchor="w",padx=15,pady=(15,0))
         sent_opts=EXCH_SENT_OPTIONS.get(L.g(),EXCH_SENT_OPTIONS["ro"]); self._sent_labels={}; self._sent_values=[]
@@ -1689,7 +1584,7 @@ class Cab2ConfigDialog(tk.Toplevel):
 
 class PreviewDialog(tk.Toplevel):
     def __init__(self,parent,title_str,content,save_callback):
-        super().__init__(parent); self.title(title_str); _responsive_geometry(self, parent, 780, 580); self.configure(bg=TH["bg"]); self.transient(parent)
+        super().__init__(parent); self.title(title_str); self.geometry("750x550"); self.configure(bg=TH["bg"]); self.transient(parent)
         self._save_cb=save_callback; self._content=content
         txt=scrolledtext.ScrolledText(self,bg=TH["entry_bg"],fg=TH["fg"],font=("Consolas",10),wrap="none"); txt.pack(fill="both",expand=True,padx=10,pady=10)
         txt.insert("1.0",content); txt.config(state="disabled")
@@ -1708,7 +1603,7 @@ class CATSettingsDialog(tk.Toplevel):
         self.cfg = dict(cfg)
         self.cat = cat_engine
         self.title("CAT — Computer Aided Transceiver")
-        _responsive_geometry(self, parent, 580, 640)
+        self.geometry("560x620")
         self.configure(bg=TH["bg"])
         self.resizable(False, False)
         self.transient(parent)
@@ -1952,7 +1847,7 @@ class NewLogDialog(tk.Toplevel):
         self.result = None
         self.contests = contests
         self.title("📝 Log Nou / New Log")
-        _responsive_geometry(self, parent, 440, 280)
+        self.geometry("420x260")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
@@ -1991,7 +1886,7 @@ class ThemeDialog(tk.Toplevel):
         self.current_theme = current_theme
         self.custom = dict(custom_colors)
         self.title("🎨 Teme și Culori / Themes & Colors")
-        _responsive_geometry(self, parent, 640, 560)
+        self.geometry("620x540")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
@@ -2099,7 +1994,7 @@ class FirstRunDialog(tk.Toplevel):
         self.cfg = cfg
         self.result = None
         self.title("YO Log PRO v17.1 — Configurare initiala / First Setup")
-        _responsive_geometry(self, parent, 580, 700)
+        self.geometry("560x680")
         self.configure(bg=TH["bg"])
         self.resizable(True, True)
         self.minsize(480, 580)
@@ -2266,7 +2161,7 @@ class LogEditorWindow(tk.Toplevel):
         self._sort_rev  = False
 
         self.title("📝 Log Editor — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 1200, 700)
+        self.geometry("1200x680")
         self.configure(bg=TH["bg"])
         self.resizable(True, True)
         self._build()
@@ -2452,8 +2347,158 @@ class LogEditorWindow(tk.Toplevel):
         _lbl_ent(r2, "Nr Serial S", "ss",   7)
         _lbl_ent(r2, "Nr Serial R", "sr",   7)
         _lbl_ent(r2, "Notă / Locator", "note", 22)
-        _lbl_ent(r2, "Dată (YYYY-MM-DD)", "date", 12)
-        _lbl_ent(r2, "Oră (HH:MM)", "time", 8)
+
+        # ── Câmp Dată cu buton Calendar ─────────────────────
+        _d_frm = tk.Frame(r2, bg=TH["bg"]); _d_frm.pack(side="left", padx=4)
+        tk.Label(_d_frm, text="Dată", **LO).pack(anchor="w")
+        _d_inner = tk.Frame(_d_frm, bg=TH["bg"]); _d_inner.pack()
+        _date_ent = tk.Entry(_d_inner, width=10, **EO)
+        _date_ent.pack(side="left")
+        self._ent["date"] = _date_ent
+
+        def _open_calendar():
+            """Calendar popup ZZ/LL/AAAA cu navigare luni."""
+            cal_win = tk.Toplevel(self)
+            cal_win.title("📅 Selectează Data")
+            cal_win.configure(bg=TH["bg"])
+            cal_win.resizable(False, False)
+            cal_win.transient(self)
+            cal_win.grab_set()
+
+            # Determină luna/an curentă din câmpul de dată sau azi
+            try:
+                existing = _date_ent.get().strip()
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', existing):
+                    y0, m0, d0 = map(int, existing.split("-"))
+                elif re.match(r'^\d{8}$', existing):
+                    y0,m0,d0 = int(existing[:4]),int(existing[4:6]),int(existing[6:8])
+                else: raise ValueError
+            except Exception:
+                now = datetime.datetime.utcnow()
+                y0, m0, d0 = now.year, now.month, now.day
+
+            _cy = [y0]; _cm = [m0]
+            MONTH_RO = ["","Ian","Feb","Mar","Apr","Mai","Iun",
+                        "Iul","Aug","Sep","Oct","Nov","Dec"]
+
+            def _render():
+                for w in cal_win.winfo_children(): w.destroy()
+                y, m = _cy[0], _cm[0]
+
+                # Nav row
+                nav = tk.Frame(cal_win, bg=TH["bg"]); nav.pack(fill="x", padx=6, pady=4)
+                tk.Button(nav, text="◀◀", command=lambda: _shift_y(-1),
+                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=3).pack(side="left")
+                tk.Button(nav, text="◀",  command=lambda: _shift(-1),
+                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=2).pack(side="left", padx=2)
+                tk.Label(nav, text=f"{MONTH_RO[m]} {y}", bg=TH["bg"], fg=TH["gold"],
+                         font=("Consolas",11,"bold"), width=12).pack(side="left", expand=True)
+                tk.Button(nav, text="▶",  command=lambda: _shift(1),
+                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=2).pack(side="right", padx=2)
+                tk.Button(nav, text="▶▶", command=lambda: _shift_y(1),
+                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=3).pack(side="right")
+
+                # Zile săptămână
+                days_hdr = tk.Frame(cal_win, bg=TH["bg"]); days_hdr.pack(padx=6)
+                for d in ["Lu","Ma","Mi","Jo","Vi","Sâ","Du"]:
+                    fg = TH["warn"] if d in ("Sâ","Du") else TH["fg2"]
+                    tk.Label(days_hdr, text=d, bg=TH["bg"], fg=fg,
+                             font=("Consolas",9,"bold"), width=3).pack(side="left")
+
+                # Grid zile
+                import calendar as _cal
+                grid = tk.Frame(cal_win, bg=TH["bg"]); grid.pack(padx=6, pady=(0,6))
+                first_wd, n_days = _cal.monthrange(y, m)  # 0=Lu
+                today = datetime.datetime.utcnow()
+                sel_d = d0 if (y == y0 and m == m0) else 0
+
+                col = first_wd
+                row_f = tk.Frame(grid, bg=TH["bg"]); row_f.pack(anchor="w")
+                for _ in range(first_wd):
+                    tk.Label(row_f, text="   ", bg=TH["bg"], width=3).pack(side="left")
+                for day in range(1, n_days + 1):
+                    is_today = (y == today.year and m == today.month and day == today.day)
+                    is_sel   = (day == sel_d)
+                    bg  = TH["warn"]   if is_sel   else \
+                          TH["accent"] if is_today  else TH["btn_bg"]
+                    fg  = "white"
+                    wd  = (first_wd + day - 1) % 7
+                    fnt_w = "bold" if is_sel or is_today else "normal"
+                    btn = tk.Button(row_f, text=str(day), width=3,
+                                    bg=bg, fg=fg, relief="flat",
+                                    font=("Consolas", 9, fnt_w),
+                                    command=lambda dd=day: _pick(dd))
+                    btn.pack(side="left")
+                    col += 1
+                    if col % 7 == 0 and day < n_days:
+                        row_f = tk.Frame(grid, bg=TH["bg"]); row_f.pack(anchor="w")
+
+                # Buton Azi
+                tk.Button(cal_win, text=f"📅 Azi UTC ({today.strftime('%Y-%m-%d')})",
+                          command=lambda: _pick_date(today.year, today.month, today.day),
+                          bg=TH["accent"], fg="white", font=("Consolas",9), width=28).pack(pady=(0,6))
+
+            def _shift(delta):
+                m = _cm[0] + delta
+                y = _cy[0]
+                if m < 1:  m = 12; y -= 1
+                if m > 12: m = 1;  y += 1
+                _cm[0] = m; _cy[0] = y
+                _render()
+
+            def _shift_y(delta):
+                _cy[0] += delta; _render()
+
+            def _pick(day):
+                _pick_date(_cy[0], _cm[0], day)
+
+            def _pick_date(y, m, d):
+                date_str = f"{y:04d}-{m:02d}-{d:02d}"
+                _date_ent.delete(0, "end")
+                _date_ent.insert(0, date_str)
+                cal_win.destroy()
+
+            _render()
+            # Centrare
+            self.update_idletasks()
+            x = self.winfo_rootx() + self.winfo_width()//2 - 130
+            y_pos = self.winfo_rooty() + self.winfo_height()//2 - 160
+            cal_win.geometry(f"250x260+{x}+{y_pos}")
+
+        tk.Button(_d_inner, text="📅", command=_open_calendar,
+                  bg=TH["accent"], fg="white",
+                  font=("Consolas",9), width=2, relief="flat").pack(side="left", padx=1)
+
+        # ── Câmp Oră cu auto-format HH:MM ───────────────────
+        _t_frm = tk.Frame(r2, bg=TH["bg"]); _t_frm.pack(side="left", padx=4)
+        tk.Label(_t_frm, text="Oră (HH:MM)", **LO).pack(anchor="w")
+        _time_ent = tk.Entry(_t_frm, width=8, **EO)
+        _time_ent.pack()
+        self._ent["time"] = _time_ent
+
+        def _auto_fmt_time(event):
+            """Formatează automat: 1512 → 15:12, 930 → 09:30, 15:12 → rămâne."""
+            v = _time_ent.get().strip().replace(":", "")
+            if not v: return
+            if v.isdigit():
+                if len(v) == 3:   v = "0" + v          # 930 → 0930
+                if len(v) == 4:                          # 1512 → 15:12
+                    hh, mm = v[:2], v[2:]
+                    try:
+                        if 0 <= int(hh) <= 23 and 0 <= int(mm) <= 59:
+                            _time_ent.delete(0, "end")
+                            _time_ent.insert(0, f"{hh}:{mm}")
+                    except Exception: pass
+            elif re.match(r'^\d{1,2}:\d{2}$', _time_ent.get().strip()):
+                # Completează cu zero dacă e 9:30 → 09:30
+                parts = _time_ent.get().strip().split(":")
+                if len(parts[0]) == 1:
+                    _time_ent.delete(0, "end")
+                    _time_ent.insert(0, f"0{parts[0]}:{parts[1]}")
+
+        _time_ent.bind("<FocusOut>", _auto_fmt_time)
+        _time_ent.bind("<Return>",   _auto_fmt_time)
+        _time_ent.bind("<Tab>",      _auto_fmt_time)
 
         # Undo stack local
         self._undo_stack = deque(maxlen=50)
@@ -2797,7 +2842,7 @@ class CallbookDialog(tk.Toplevel):
         self._result  = {}
         self._html_raw = ""
         self.title("🌐 Callbook Lookup — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 820, 640)
+        self.geometry("780x600")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.resizable(True, True)
@@ -3246,7 +3291,7 @@ class BandMapWindow(tk.Toplevel):
         self.log_getter = log_getter
         self.cfg_getter = cfg_getter
         self.title("📡 Band Map — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 860, 520)
+        self.geometry("820x500")
         self.configure(bg=TH["bg"])
         self.resizable(True, True)
         self._build()
@@ -3376,7 +3421,7 @@ class DXClusterWindow(tk.Toplevel):
         super(DXClusterWindow, self).__init__(parent)
         self.on_spot = on_spot  # callback(call, freq) la click spot
         self.title("📡 DX Cluster — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 900, 560)
+        self.geometry("860x520")
         self.configure(bg=TH["bg"])
         self._sock = None
         self._thread = None
@@ -3681,7 +3726,7 @@ class RateStatsWindow(tk.Toplevel):
         self.log_getter = log_getter
         self.cfg_getter = cfg_getter
         self.title("📈 Statistici Rate QSO — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 900, 600)
+        self.geometry("860x560")
         self.configure(bg=TH["bg"])
         self._build()
         self._refresh()
@@ -3716,35 +3761,23 @@ class RateStatsWindow(tk.Toplevel):
 
         tk.Label(rf, text="Top DXCC", bg=TH["bg"], fg=TH["gold"],
                  font=("Consolas", 10, "bold")).pack(anchor="w", pady=(0,2))
-        dxcc_f = tk.Frame(rf, bg=TH["bg"]); dxcc_f.pack(fill="x")
-        self._dxcc_tree = ttk.Treeview(dxcc_f, columns=("dxcc","count"), show="headings", height=8)
+        self._dxcc_tree = ttk.Treeview(rf, columns=("dxcc","count"), show="headings", height=8)
         self._dxcc_tree.heading("dxcc", text="DXCC/Țară")
         self._dxcc_tree.heading("count", text="QSO")
         self._dxcc_tree.column("dxcc", width=200)
         self._dxcc_tree.column("count", width=60, anchor="center")
-        dxcc_sb = ttk.Scrollbar(dxcc_f, orient="vertical", command=self._dxcc_tree.yview)
-        self._dxcc_tree.configure(yscrollcommand=dxcc_sb.set)
-        dxcc_sb.pack(side="right", fill="y"); self._dxcc_tree.pack(side="left", fill="x", expand=True)
-        self._dxcc_tree.bind("<MouseWheel>", lambda e: self._dxcc_tree.yview_scroll(int(-1*(e.delta/120)),"units"))
-        self._dxcc_tree.bind("<Button-4>", lambda e: self._dxcc_tree.yview_scroll(-1,"units"))
-        self._dxcc_tree.bind("<Button-5>", lambda e: self._dxcc_tree.yview_scroll(1,"units"))
+        self._dxcc_tree.pack(fill="x")
 
         tk.Label(rf, text="Per Bandă", bg=TH["bg"], fg=TH["gold"],
                  font=("Consolas", 10, "bold")).pack(anchor="w", pady=(8,2))
-        band_f = tk.Frame(rf, bg=TH["bg"]); band_f.pack(fill="x")
-        self._band_tree = ttk.Treeview(band_f, columns=("band","count","pct"), show="headings", height=8)
+        self._band_tree = ttk.Treeview(rf, columns=("band","count","pct"), show="headings", height=8)
         self._band_tree.heading("band", text="Bandă")
         self._band_tree.heading("count", text="QSO")
         self._band_tree.heading("pct", text="%")
         self._band_tree.column("band", width=70, anchor="center")
         self._band_tree.column("count", width=60, anchor="center")
         self._band_tree.column("pct", width=50, anchor="center")
-        band_sb = ttk.Scrollbar(band_f, orient="vertical", command=self._band_tree.yview)
-        self._band_tree.configure(yscrollcommand=band_sb.set)
-        band_sb.pack(side="right", fill="y"); self._band_tree.pack(side="left", fill="x", expand=True)
-        self._band_tree.bind("<MouseWheel>", lambda e: self._band_tree.yview_scroll(int(-1*(e.delta/120)),"units"))
-        self._band_tree.bind("<Button-4>", lambda e: self._band_tree.yview_scroll(-1,"units"))
-        self._band_tree.bind("<Button-5>", lambda e: self._band_tree.yview_scroll(1,"units"))
+        self._band_tree.pack(fill="x")
 
         # Bottom stats
         self._stats_frame = tk.Frame(self, bg=TH["bg"])
@@ -3904,7 +3937,7 @@ class LiveScorePanel(tk.Toplevel):
         self.cfg_getter = cfg_getter
         self.contest_getter = contest_getter
         self.title("📊 Scor Live — YO Log PRO v17.1")
-        _responsive_geometry(self, parent, 440, 520)
+        self.geometry("420x500")
         self.configure(bg=TH["bg"])
         self.resizable(False, True)
         self._build()
@@ -3918,12 +3951,6 @@ class LiveScorePanel(tk.Toplevel):
 
         mf = tk.Frame(self, bg=TH["bg"], padx=12, pady=8)
         mf.pack(fill="both", expand=True)
-        # Bind mousewheel scroll on the whole window
-        def _mw_scroll(e):
-            try:
-                self.event_generate("<MouseWheel>", delta=e.delta)
-            except Exception: pass
-        self.bind_all("<MouseWheel>", lambda e: None)  # no-op reset
 
         # Score principal
         self._score_lbl = tk.Label(mf, text="0", bg=TH["bg"], fg=TH["gold"],
@@ -4235,24 +4262,10 @@ class App(tk.Tk):
 
     def _setup_win(self):
         self.title(L.t("app_title")); self.configure(bg=TH["bg"])
-        geo = self.cfg.get("win_geo", "")
-        try:
-            sw = self.winfo_screenwidth()
-            sh = self.winfo_screenheight()
-        except Exception:
-            sw, sh = 1366, 768
-        # Responsive default: 96% of screen, min 900x600
-        def_w = max(900, min(1280, int(sw * 0.96)))
-        def_h = max(600, min(780,  int(sh * 0.92)))
-        if geo:
-            try: self.geometry(geo)
-            except: self.geometry(f"{def_w}x{def_h}")
-        else:
-            self.geometry(f"{def_w}x{def_h}")
-        # Minsize: 70% of screen so it always fits
-        min_w = max(700, int(sw * 0.55))
-        min_h = max(480, int(sh * 0.60))
-        self.minsize(min_w, min_h)
+        geo=self.cfg.get("win_geo","")
+        try: self.geometry(geo if geo else "1280x780")
+        except: self.geometry("1280x780")
+        self.minsize(1100,680)
 
     def _setup_style(self):
         self.fs=int(self.cfg.get("fs",11)); self.fn=("Consolas",self.fs); self.fb=("Consolas",self.fs,"bold")
@@ -4382,12 +4395,32 @@ class App(tk.Tk):
         r2=tk.Frame(ip,bg=TH["bg"]); r2.pack(fill="x",pady=(6,0))
         tk.Label(r2,text=L.t("date_l"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=3)
         self.ent["date"]=tk.Entry(r2,width=11,bg=TH["entry_bg"],fg=TH["fg"],font=self.fn,justify="center",state="disabled"); self.ent["date"].pack(side="left",padx=2)
+        self._cal_btn_main=tk.Button(r2,text="📅",command=self._open_main_calendar,
+                                      bg=TH["accent"],fg="white",font=("Consolas",9),width=2,relief="flat",state="disabled")
+        self._cal_btn_main.pack(side="left",padx=1)
         tk.Label(r2,text=L.t("time_l"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=3)
         self.ent["time"]=tk.Entry(r2,width=7,bg=TH["entry_bg"],fg=TH["fg"],font=self.fn,justify="center",state="disabled"); self.ent["time"].pack(side="left",padx=2)
+        def _main_fmt_time(event=None):
+            if self.ent["time"].cget("state") == "disabled": return
+            v = self.ent["time"].get().strip().replace(":",""); 
+            if v.isdigit():
+                if len(v) == 3: v = "0" + v
+                if len(v) == 4:
+                    hh,mm = v[:2],v[2:]
+                    try:
+                        if 0<=int(hh)<=23 and 0<=int(mm)<=59:
+                            self.ent["time"].delete(0,"end"); self.ent["time"].insert(0,f"{hh}:{mm}")
+                    except Exception: pass
+            elif re.match(r"^\d{1}:\d{2}$", self.ent["time"].get().strip()):
+                p=self.ent["time"].get().strip().split(":")
+                self.ent["time"].delete(0,"end"); self.ent["time"].insert(0,f"0{p[0]}:{p[1]}")
+        self.ent["time"].bind("<FocusOut>",_main_fmt_time)
+        self.ent["time"].bind("<Return>",  _main_fmt_time)
         now=datetime.datetime.utcnow()
         for k,v in [("date",now.strftime("%Y-%m-%d")),("time",now.strftime("%H:%M"))]:
             self.ent[k].config(state="normal"); self.ent[k].insert(0,v)
             if not self.man_v.get(): self.ent[k].config(state="disabled")
+        if not self.man_v.get(): self._cal_btn_main.config(state="disabled")
         tk.Label(r2,text=L.t("category"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=(12,3))
         cats=cc.get("categories",["Individual"]) or ["Individual"]
         saved_cat=min(self.cfg.get("cat",0),max(0,len(cats)-1))
@@ -4436,71 +4469,37 @@ class App(tk.Tk):
         for idx,(_,k) in enumerate(items): self.tree.move(k,"",idx)
 
     def _build_btns(self):
-        """Bara de butoane — responsive, se adaptează la orice rezoluție/scalare."""
-        try:
-            sw = self.winfo_screenwidth()
-        except Exception:
-            sw = 1366
-        # Compact mode sub 1200px lățime ecran (scalare 100% pe ecrane mici)
-        compact = sw < 1200
-        BFONT = ("Consolas", 8 if compact else 9)
-        BPAD  = 1 if compact else 2
-        # w=0 -> autosize via pack, w>0 -> fix width
-        def _btn(parent, text, cmd, color, w=0):
-            kw = {"width": w} if w > 0 else {}
+        """Bara de butoane — 2 rânduri, text complet vizibil, fără trunchiere."""
+        BFONT = ("Consolas", 9)
+        BPAD  = 2
+        def _btn(parent, text, cmd, color, w=9):
             tk.Button(parent, text=text, command=cmd,
                       bg=color, fg="white",
-                      font=BFONT,
+                      font=BFONT, width=w,
                       relief="raised", bd=1,
                       activebackground=color,
-                      activeforeground="white",
-                      padx=3 if compact else 5,
-                      **kw).pack(side="left", padx=BPAD, pady=1)
-
-        # Container scrollabil orizontal pentru bare
-        bar_outer = tk.Frame(self, bg=TH["bg"])
-        bar_outer.pack(fill="x", side="bottom")
-        bar_canvas = tk.Canvas(bar_outer, bg=TH["bg"], highlightthickness=0,
-                                height=58 if compact else 64)
-        bar_hsb = ttk.Scrollbar(bar_outer, orient="horizontal", command=bar_canvas.xview)
-        bar_canvas.configure(xscrollcommand=bar_hsb.set)
-        bar_hsb.pack(side="bottom", fill="x")
-        bar_canvas.pack(side="top", fill="x", expand=True)
-        bar_inner = tk.Frame(bar_canvas, bg=TH["bg"])
-        bar_win = bar_canvas.create_window((0, 0), window=bar_inner, anchor="nw")
-        def _bar_configure(e):
-            bar_canvas.configure(scrollregion=bar_canvas.bbox("all"))
-            # Auto-hide scrollbar when not needed
-            cr = bar_canvas.bbox("all")
-            if cr and cr[2] <= bar_canvas.winfo_width():
-                bar_hsb.pack_forget()
-            else:
-                if not bar_hsb.winfo_ismapped():
-                    bar_hsb.pack(side="bottom", fill="x")
-        bar_inner.bind("<Configure>", _bar_configure)
-        bar_canvas.bind("<MouseWheel>",       lambda e: bar_canvas.xview_scroll(int(-1*(e.delta/120)),"units"))
-        bar_canvas.bind("<Shift-MouseWheel>", lambda e: bar_canvas.xview_scroll(int(-1*(e.delta/120)),"units"))
+                      activeforeground="white").pack(side="left", padx=BPAD, pady=1)
 
         # ── Rândul 1 ──
-        bb1 = tk.Frame(bar_inner, bg=TH["bg"]); bb1.pack(fill="x", padx=4, pady=(4,1))
-        _btn(bb1, "⚙ " + L.t("settings"),  self._settings,       TH["warn"])
-        _btn(bb1, "🏆 " + L.t("contests"), self._mgr,             "#C2185B")
-        _btn(bb1, "📡 CAT",                 self._cat_dlg,         "#1a5276")
-        _btn(bb1, "📝 Log Nou",             self._new_log_dlg,     "#2e7d32")
-        _btn(bb1, "🎨 Teme",                self._theme_dlg,       "#6a1b9a")
-        _btn(bb1, "📊 " + L.t("stats"),    self._stats,           "#3F51B5")
-        _btn(bb1, "✔ " + L.t("validate"),  self._validate,        TH["ok"])
-        _btn(bb1, "📤 " + L.t("export"),   self._export_dlg,      "#9C27B0")
+        bb1 = tk.Frame(self, bg=TH["bg"]); bb1.pack(fill="x", padx=4, pady=(4,1))
+        _btn(bb1, "⚙ " + L.t("settings"),  self._settings,       TH["warn"],   w=10)
+        _btn(bb1, "🏆 " + L.t("contests"), self._mgr,             "#C2185B",    w=10)
+        _btn(bb1, "📡 CAT",                 self._cat_dlg,         "#1a5276",    w=8)
+        _btn(bb1, "📝 Log Nou",             self._new_log_dlg,     "#2e7d32",    w=9)
+        _btn(bb1, "🎨 Teme",                self._theme_dlg,       "#6a1b9a",    w=8)
+        _btn(bb1, "📊 " + L.t("stats"),    self._stats,           "#3F51B5",    w=10)
+        _btn(bb1, "✔ " + L.t("validate"),  self._validate,        TH["ok"],     w=10)
+        _btn(bb1, "📤 " + L.t("export"),   self._export_dlg,      "#9C27B0",    w=9)
 
         # ── Rândul 2 ──
-        bb2 = tk.Frame(bar_inner, bg=TH["bg"]); bb2.pack(fill="x", padx=4, pady=(1,4))
-        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,   "#E64A19")
-        _btn(bb2, "↩ " + L.t("undo"),        self._undo,          "#5D4037")
-        _btn(bb2, "💾 " + L.t("backup"),     self._bak,           "#546E7A")
-        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,    "#00796B")
-        _btn(bb2, "⏱ Timer",                 self._timer_dlg,     "#004D40")
-        _btn(bb2, "📝 Log Editor",            self._open_log_editor,"#1B5E20")
-        _btn(bb2, "🌐 Callbook",              self._open_callbook,  "#1a237e")
+        bb2 = tk.Frame(self, bg=TH["bg"]); bb2.pack(fill="x", padx=4, pady=(1,4))
+        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,   "#E64A19",    w=9)
+        _btn(bb2, "↩ " + L.t("undo"),        self._undo,          "#5D4037",    w=8)
+        _btn(bb2, "💾 " + L.t("backup"),     self._bak,           "#546E7A",    w=9)
+        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,    "#00796B",    w=9)
+        _btn(bb2, "⏱ Timer",                 self._timer_dlg,     "#004D40",    w=8)
+        _btn(bb2, "📝 Log Editor",            self._open_log_editor,"#1B5E20",   w=11)
+        _btn(bb2, "🌐 Callbook",              self._open_callbook,  "#1a237e",   w=10)
 
     def _refresh(self):
         if not self.tree: return
@@ -4768,9 +4767,83 @@ class App(tk.Tk):
         am=self._cc().get("allowed_modes",MODES_ALL) or MODES_ALL; cur=self.ent["mode"].get()
         self.ent["mode"].set(am[(am.index(cur)+1)%len(am)] if cur in am else am[0]); self._on_mode_change()
 
+    def _open_main_calendar(self):
+        """Calendar popup pentru câmpul Dată din fereastra principală."""
+        import calendar as _cal
+        cal_win = tk.Toplevel(self)
+        cal_win.title("📅 Selectează Data")
+        cal_win.configure(bg=TH["bg"])
+        cal_win.resizable(False, False)
+        cal_win.transient(self)
+        cal_win.grab_set()
+        MONTH_RO = ["","Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"]
+        try:
+            ex = self.ent["date"].get().strip()
+            if re.match(r"^\d{4}-\d{2}-\d{2}$", ex):
+                y0,m0,d0 = map(int, ex.split("-"))
+            else: raise ValueError
+        except Exception:
+            now = datetime.datetime.utcnow(); y0,m0,d0 = now.year,now.month,now.day
+        _cy=[y0]; _cm=[m0]
+
+        def _render():
+            for w in cal_win.winfo_children(): w.destroy()
+            y,m = _cy[0],_cm[0]
+            nav = tk.Frame(cal_win,bg=TH["bg"]); nav.pack(fill="x",padx=6,pady=4)
+            tk.Button(nav,text="◄◄",command=lambda:_shift_y(-1),bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=3).pack(side="left")
+            tk.Button(nav,text="◄", command=lambda:_shift(-1),  bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=2).pack(side="left",padx=2)
+            tk.Label(nav,text=f"{MONTH_RO[m]} {y}",bg=TH["bg"],fg=TH["gold"],font=("Consolas",11,"bold"),width=12).pack(side="left",expand=True)
+            tk.Button(nav,text="►", command=lambda:_shift(1),   bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=2).pack(side="right",padx=2)
+            tk.Button(nav,text="►►",command=lambda:_shift_y(1), bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=3).pack(side="right")
+            days_hdr=tk.Frame(cal_win,bg=TH["bg"]); days_hdr.pack(padx=6)
+            for d in ["Lu","Ma","Mi","Jo","Vi","S\u00e2","Du"]:
+                fg=TH["warn"] if d in ("S\u00e2","Du") else TH["fg2"]
+                tk.Label(days_hdr,text=d,bg=TH["bg"],fg=fg,font=("Consolas",9,"bold"),width=3).pack(side="left")
+            grid=tk.Frame(cal_win,bg=TH["bg"]); grid.pack(padx=6,pady=(0,6))
+            first_wd,n_days=_cal.monthrange(y,m)
+            today=datetime.datetime.utcnow()
+            sel_d=d0 if (y==y0 and m==m0) else 0
+            row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
+            for _ in range(first_wd):
+                tk.Label(row_f,text="   ",bg=TH["bg"],width=3).pack(side="left")
+            col=first_wd
+            for day in range(1,n_days+1):
+                is_today=(y==today.year and m==today.month and day==today.day)
+                is_sel=(day==sel_d)
+                bg=TH["warn"] if is_sel else TH["accent"] if is_today else TH["btn_bg"]
+                fnt_w="bold" if (is_sel or is_today) else "normal"
+                btn=tk.Button(row_f,text=str(day),width=3,bg=bg,fg="white",relief="flat",
+                               font=("Consolas",9,fnt_w),command=lambda dd=day:_pick(dd))
+                btn.pack(side="left")
+                col+=1
+                if col%7==0 and day<n_days:
+                    row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
+            tk.Button(cal_win,text=f"📅 Azi UTC ({today.strftime('%Y-%m-%d')})",
+                      command=lambda:_pick_date(today.year,today.month,today.day),
+                      bg=TH["accent"],fg="white",font=("Consolas",9),width=28).pack(pady=(0,6))
+
+        def _shift(delta):
+            m=_cm[0]+delta; y=_cy[0]
+            if m<1: m=12; y-=1
+            if m>12: m=1; y+=1
+            _cm[0]=m; _cy[0]=y; _render()
+        def _shift_y(delta): _cy[0]+=delta; _render()
+        def _pick(day): _pick_date(_cy[0],_cm[0],day)
+        def _pick_date(y,m,d):
+            ds=f"{y:04d}-{m:02d}-{d:02d}"
+            self.ent["date"].delete(0,"end"); self.ent["date"].insert(0,ds)
+            cal_win.destroy()
+        _render()
+        self.update_idletasks()
+        x=self.winfo_rootx()+self.winfo_width()//2-130
+        y_pos=self.winfo_rooty()+self.winfo_height()//2-160
+        cal_win.geometry(f"250x270+{x}+{y_pos}")
+
     def _tog_man(self):
         m=self.man_v.get()
         self.ent["date"].config(state="normal" if m else "disabled"); self.ent["time"].config(state="normal" if m else "disabled")
+        try: self._cal_btn_main.config(state="normal" if m else "disabled")
+        except Exception: pass
         if self.led_c: self.led_c.itemconfig(self.led,fill=TH["led_off"] if m else TH["led_on"])
         if self.st_lbl: self.st_lbl.config(text=L.t("offline") if m else L.t("online"),fg=TH["led_off"] if m else TH["led_on"])
         self.cfg["manual_dt"]=m
@@ -4823,7 +4896,7 @@ class App(tk.Tk):
         if d.result: self.contests=d.result; DM.save("contests.json",self.contests); self._rebuild()
 
     def _about(self):
-        d=tk.Toplevel(self); d.title(L.t("about")); _responsive_geometry(d, self, 540, 380)
+        d=tk.Toplevel(self); d.title(L.t("about")); d.geometry("520x360")
         d.configure(bg=TH["bg"]); d.transient(self); d.resizable(False,False)
         center_dialog(d,self)
         tk.Label(d,text="📻 YO Log PRO v17.1 — Full Edition",
@@ -4857,22 +4930,8 @@ class App(tk.Tk):
 
 
     def _settings(self):
-        d=tk.Toplevel(self); d.title(L.t("settings")); _responsive_geometry(d, self, 440, 580); d.configure(bg=TH["bg"]); d.transient(self)
+        d=tk.Toplevel(self); d.title(L.t("settings")); d.geometry("420x560"); d.configure(bg=TH["bg"]); d.transient(self)
         eo={"bg":TH["entry_bg"],"fg":TH["fg"],"font":self.fn,"insertbackground":TH["fg"]}
-        # ── Scroll wrapper pentru Settings ──
-        scrl_outer = tk.Frame(d, bg=TH["bg"]); scrl_outer.pack(fill="both", expand=True)
-        scrl_canvas = tk.Canvas(scrl_outer, bg=TH["bg"], highlightthickness=0)
-        scrl_vsb = ttk.Scrollbar(scrl_outer, orient="vertical", command=scrl_canvas.yview)
-        scrl_canvas.configure(yscrollcommand=scrl_vsb.set)
-        scrl_vsb.pack(side="right", fill="y"); scrl_canvas.pack(side="left", fill="both", expand=True)
-        sc_inner = tk.Frame(scrl_canvas, bg=TH["bg"])
-        sc_win = scrl_canvas.create_window((0,0), window=sc_inner, anchor="nw")
-        sc_inner.bind("<Configure>", lambda e: scrl_canvas.configure(scrollregion=scrl_canvas.bbox("all")))
-        scrl_canvas.bind("<Configure>", lambda e: scrl_canvas.itemconfig(sc_win, width=e.width))
-        scrl_canvas.bind("<MouseWheel>", lambda e: scrl_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
-        scrl_canvas.bind("<Button-4>", lambda e: scrl_canvas.yview_scroll(-1, "units"))
-        scrl_canvas.bind("<Button-5>", lambda e: scrl_canvas.yview_scroll(1, "units"))
-        p = sc_inner  # parent for all settings widgets
         fields=[("call",L.t("call"),self.cfg.get("call","")),("loc",L.t("locator"),self.cfg.get("loc","")),
                 ("jud",L.t("county"),self.cfg.get("jud","")),("addr",L.t("address"),self.cfg.get("addr","")),
                 ("op_name",L.t("op"),self.cfg.get("op_name","")),("power",L.t("power"),self.cfg.get("power","100")),
@@ -4880,19 +4939,17 @@ class App(tk.Tk):
                 ("fs",L.t("font_size"),str(self.cfg.get("fs",11)))]
         es={}
         for k,lb,v in fields:
-            tk.Label(p,text=lb,bg=TH["bg"],fg=TH["fg"]).pack(anchor="w",padx=15)
-            e=tk.Entry(p,width=35,**eo); e.insert(0,v); e.pack(pady=2,padx=15); es[k]=e
+            tk.Label(d,text=lb,bg=TH["bg"],fg=TH["fg"]).pack(anchor="w",padx=15)
+            e=tk.Entry(d,width=35,**eo); e.insert(0,v); e.pack(pady=2,padx=15); es[k]=e
         snd_v=tk.BooleanVar(value=self.cfg.get("sounds",True))
-        tk.Checkbutton(p,text=L.t("en_sounds"),variable=snd_v,bg=TH["bg"],fg=TH["fg"],selectcolor=TH["entry_bg"],activebackground=TH["bg"]).pack(anchor="w",padx=15,pady=4)
-        scrl_v=tk.BooleanVar(value=self.cfg.get("scroll_popups",True))
-        tk.Checkbutton(p,text=L.t("en_scroll"),variable=scrl_v,bg=TH["bg"],fg=TH["fg"],selectcolor=TH["entry_bg"],activebackground=TH["bg"]).pack(anchor="w",padx=15,pady=4)
+        tk.Checkbutton(d,text=L.t("en_sounds"),variable=snd_v,bg=TH["bg"],fg=TH["fg"],selectcolor=TH["entry_bg"],activebackground=TH["bg"]).pack(anchor="w",padx=15,pady=4)
         def save():
             for k in es:
                 v=es[k].get().strip(); self.cfg[k]=v.upper() if k in {"call","loc","jud"} else v
             try: self.cfg["fs"]=int(es["fs"].get().strip())
             except: self.cfg["fs"]=11
-            self.cfg["sounds"]=snd_v.get(); self.cfg["scroll_popups"]=scrl_v.get(); DM.save("config.json",self.cfg); d.destroy(); self._rebuild()
-        tk.Button(p,text=L.t("save"),command=save,bg=TH["accent"],fg="white",width=12).pack(pady=12); center_dialog(d,self)
+            self.cfg["sounds"]=snd_v.get(); DM.save("config.json",self.cfg); d.destroy(); self._rebuild()
+        tk.Button(d,text=L.t("save"),command=save,bg=TH["accent"],fg="white",width=12).pack(pady=12); center_dialog(d,self)
 
     def _stats(self): StatsWindow(self,self.log,self._cc(),self.cfg)
     def _validate(self):
@@ -4900,7 +4957,7 @@ class App(tk.Tk):
         ok, msg, _ = Score.validate(self.log, self._cc(), self.cfg)
         (messagebox.showinfo if ok else messagebox.showwarning)(L.t("val_result"), msg)
     def _search_dlg(self): SearchDialog(self,self.log)
-    def _timer_dlg(self): TimerDialog(self, self.cfg)
+    def _timer_dlg(self): TimerDialog(self)
     def _verify_hash(self):
         try:
             h=hashlib.md5(json.dumps(self.log,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest()
@@ -4912,7 +4969,7 @@ class App(tk.Tk):
             self._refresh(); DM.save_log(self._cid(),self.log)
 
     def _import_menu(self):
-        d=tk.Toplevel(self); d.title(L.t("import_log")); _responsive_geometry(d, self, 300, 220); d.configure(bg=TH["bg"]); d.transient(self)
+        d=tk.Toplevel(self); d.title(L.t("import_log")); d.geometry("280x200"); d.configure(bg=TH["bg"]); d.transient(self)
         for txt,cmd in [("ADIF (.adi/.adif)",lambda:[d.destroy(),self._import_adif()]),("CSV (.csv)",lambda:[d.destroy(),self._import_csv()]),("Cabrillo (.log)",lambda:[d.destroy(),self._import_cabrillo()])]:
             tk.Button(d,text=txt,command=cmd,bg=TH["accent"],fg="white",width=24).pack(pady=6)
         center_dialog(d,self)
@@ -4950,7 +5007,7 @@ class App(tk.Tk):
         DM.backup(self._cid(),self.log); return True
 
     def _export_dlg(self):
-        d=tk.Toplevel(self); d.title(L.t("export")); _responsive_geometry(d, self, 320, 340); d.configure(bg=TH["bg"]); d.transient(self)
+        d=tk.Toplevel(self); d.title(L.t("export")); d.geometry("300x310"); d.configure(bg=TH["bg"]); d.transient(self)
         for txt,cmd in [("Cabrillo 3.0 (.log)",lambda:self._exp_cab(d)),(L.t("exp_cab2"),lambda:self._exp_cab2(d)),("ADIF 3.1 (.adi)",lambda:self._exp_adif(d)),("CSV (.csv)",lambda:self._exp_csv(d)),(L.t("exp_edi"),lambda:self._exp_edi(d)),(L.t("exp_print"),lambda:self._exp_print(d))]:
             tk.Button(d,text=txt,command=cmd,bg=TH["accent"],fg="white",width=28).pack(pady=4)
         center_dialog(d,self)
@@ -4999,15 +5056,27 @@ class App(tk.Tk):
             _,_,tot=Score.total(self.log,cc,self.cfg)
             lines=["START-OF-LOG: 2.0","CREATED BY: YO Log PRO v17.1",f"CONTEST: {nm}",f"CALLSIGN: {my}",f"NAME: {self.cfg.get('op_name','')}",f"CATEGORY: {cat_num}",f"CLAIMED-SCORE: {tot}",f"ADDRESS: {self.cfg.get('addr','')}",f"EMAIL: {self.cfg.get('email','')}","SOAPBOX: Logged with YO Log PRO v17.1",f"SOAPBOX: {self.cfg.get('soapbox','73 GL')}","SOAPBOX:  mo  yyyy mm dd hhmm call         rs exc call          rs exc","SOAPBOX:  ** ********** **** ************* **  ** ************* **  **"]
             for q in self.log:
-                freq=q.get("f","") or str(BAND_FREQ.get(q.get("b",""),0))
-                try: freq=str(int(float(freq)))
+                # Frecvența — întreg kHz
+                freq = q.get("f","") or str(BAND_FREQ.get(q.get("b",""), 0))
+                try: freq = str(int(float(freq)))
                 except Exception: pass
-                mode=CAB2_MODE_MAP.get(q.get("m","SSB"),"PH")
-                date=q.get("d","")
-                if len(date)==8 and "-" not in date: date=f"{date[:4]}-{date[4:6]}-{date[6:8]}"
-                time_str=q.get("t","").replace(":","")[:4]
-                es=self._resolve_exchange_sent(q,exch_sent_mode); er=self._resolve_exchange_rcvd(q,exch_rcvd_mode)
-                lines.append(f"QSO: {freq} {mode} {date} {time_str} {my:<13} {q.get('s','59'):>2}  {es:<2} {q.get('c',''):<13} {q.get('r','59'):>2}  {er:<2}")
+                # Modul — Cabrillo 2.0: PH/CW/RY/DG
+                mode = CAB2_MODE_MAP.get(q.get("m","SSB"), "PH")
+                # Data — Cabrillo 2.0 standard: YYYYMMDD (fără cratime!)
+                date = q.get("d","").replace("-","")  # "2026-03-04" → "20260304"
+                if len(date) != 8: date = datetime.datetime.utcnow().strftime("%Y%m%d")
+                # Ora — HHMM (fără două puncte)
+                time_str = q.get("t","0000").replace(":","")[:4]
+                if not time_str or len(time_str) < 4: time_str = "0000"
+                # Exchange sent/received
+                es = self._resolve_exchange_sent(q, exch_sent_mode)
+                er = self._resolve_exchange_rcvd(q, exch_rcvd_mode)
+                # Formatare coloană fixă Cabrillo 2.0
+                lines.append(
+                    f"QSO: {freq:>5} {mode:<2} {date} {time_str} "
+                    f"{my:<13} {q.get('s','59'):>2}  {es:<10} "
+                    f"{q.get('c',''):<13} {q.get('r','59'):>2}  {er:<10}"
+                )
             lines.append("END-OF-LOG:"); content="\n".join(lines)
             def do_save(text):
                 fp=filedialog.asksaveasfilename(defaultextension=".log",filetypes=[("Cabrillo","*.log")],initialfile=f"cab2_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log")
