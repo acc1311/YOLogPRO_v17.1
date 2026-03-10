@@ -2357,113 +2357,102 @@ class LogEditorWindow(tk.Toplevel):
         self._ent["date"] = _date_ent
 
         def _open_calendar():
-            """Calendar popup ZZ/LL/AAAA cu navigare luni."""
+            """Calendar popup — apare lângă buton, memorează ziua selectată."""
+            import calendar as _cal
             cal_win = tk.Toplevel(self)
-            cal_win.title("📅 Selectează Data")
+            cal_win.title("Selectează Data")
             cal_win.configure(bg=TH["bg"])
             cal_win.resizable(False, False)
             cal_win.transient(self)
             cal_win.grab_set()
-
-            # Determină luna/an curentă din câmpul de dată sau azi
+            MONTH_RO = ["","Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"]
             try:
                 existing = _date_ent.get().strip()
                 if re.match(r'^\d{4}-\d{2}-\d{2}$', existing):
-                    y0, m0, d0 = map(int, existing.split("-"))
+                    y0,m0,d0 = map(int, existing.split("-"))
                 elif re.match(r'^\d{8}$', existing):
                     y0,m0,d0 = int(existing[:4]),int(existing[4:6]),int(existing[6:8])
                 else: raise ValueError
             except Exception:
-                now = datetime.datetime.utcnow()
-                y0, m0, d0 = now.year, now.month, now.day
-
-            _cy = [y0]; _cm = [m0]
-            MONTH_RO = ["","Ian","Feb","Mar","Apr","Mai","Iun",
-                        "Iul","Aug","Sep","Oct","Nov","Dec"]
+                now = datetime.datetime.utcnow(); y0,m0,d0 = now.year,now.month,now.day
+            _cy=[y0]; _cm=[m0]; _cd=[d0]  # _cd = ziua selectată curent
 
             def _render():
                 for w in cal_win.winfo_children(): w.destroy()
-                y, m = _cy[0], _cm[0]
-
-                # Nav row
-                nav = tk.Frame(cal_win, bg=TH["bg"]); nav.pack(fill="x", padx=6, pady=4)
-                tk.Button(nav, text="◀◀", command=lambda: _shift_y(-1),
-                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=3).pack(side="left")
-                tk.Button(nav, text="◀",  command=lambda: _shift(-1),
-                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=2).pack(side="left", padx=2)
-                tk.Label(nav, text=f"{MONTH_RO[m]} {y}", bg=TH["bg"], fg=TH["gold"],
-                         font=("Consolas",11,"bold"), width=12).pack(side="left", expand=True)
-                tk.Button(nav, text="▶",  command=lambda: _shift(1),
-                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=2).pack(side="right", padx=2)
-                tk.Button(nav, text="▶▶", command=lambda: _shift_y(1),
-                          bg=TH["btn_bg"], fg="white", font=("Consolas",9), width=3).pack(side="right")
-
-                # Zile săptămână
-                days_hdr = tk.Frame(cal_win, bg=TH["bg"]); days_hdr.pack(padx=6)
-                for d in ["Lu","Ma","Mi","Jo","Vi","Sâ","Du"]:
-                    fg = TH["warn"] if d in ("Sâ","Du") else TH["fg2"]
-                    tk.Label(days_hdr, text=d, bg=TH["bg"], fg=fg,
-                             font=("Consolas",9,"bold"), width=3).pack(side="left")
-
-                # Grid zile
-                import calendar as _cal
-                grid = tk.Frame(cal_win, bg=TH["bg"]); grid.pack(padx=6, pady=(0,6))
-                first_wd, n_days = _cal.monthrange(y, m)  # 0=Lu
-                today = datetime.datetime.utcnow()
-                sel_d = d0 if (y == y0 and m == m0) else 0
-
-                col = first_wd
-                row_f = tk.Frame(grid, bg=TH["bg"]); row_f.pack(anchor="w")
+                y,m = _cy[0],_cm[0]
+                nav=tk.Frame(cal_win,bg=TH["bg"]); nav.pack(fill="x",padx=6,pady=(6,2))
+                tk.Button(nav,text="<<",command=lambda:_shift_y(-1),
+                          bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="left")
+                tk.Button(nav,text=" < ",command=lambda:_shift(-1),
+                          bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="left",padx=2)
+                tk.Label(nav,text=f"  {MONTH_RO[m]} {y}  ",bg=TH["bg"],fg=TH["gold"],
+                         font=("Consolas",12,"bold")).pack(side="left",expand=True)
+                tk.Button(nav,text=" > ",command=lambda:_shift(1),
+                          bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="right",padx=2)
+                tk.Button(nav,text=">>",command=lambda:_shift_y(1),
+                          bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="right")
+                days_hdr=tk.Frame(cal_win,bg=TH["bg"]); days_hdr.pack(fill="x",padx=6,pady=(2,0))
+                for d in ["Lu","Ma","Mi","Jo","Vi","Sa","Du"]:
+                    fg=TH["warn"] if d in ("Sa","Du") else TH["fg2"]
+                    tk.Label(days_hdr,text=d,bg=TH["bg"],fg=fg,
+                             font=("Consolas",9,"bold"),width=4,anchor="center").pack(side="left")
+                grid=tk.Frame(cal_win,bg=TH["bg"]); grid.pack(padx=6,pady=2)
+                first_wd,n_days=_cal.monthrange(y,m)
+                today=datetime.datetime.utcnow()
+                sel_d=_cd[0] if (y==_cy[0] and m==_cm[0]) else 0
+                row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
                 for _ in range(first_wd):
-                    tk.Label(row_f, text="   ", bg=TH["bg"], width=3).pack(side="left")
-                for day in range(1, n_days + 1):
-                    is_today = (y == today.year and m == today.month and day == today.day)
-                    is_sel   = (day == sel_d)
-                    bg  = TH["warn"]   if is_sel   else \
-                          TH["accent"] if is_today  else TH["btn_bg"]
-                    fg  = "white"
-                    wd  = (first_wd + day - 1) % 7
-                    fnt_w = "bold" if is_sel or is_today else "normal"
-                    btn = tk.Button(row_f, text=str(day), width=3,
-                                    bg=bg, fg=fg, relief="flat",
-                                    font=("Consolas", 9, fnt_w),
-                                    command=lambda dd=day: _pick(dd))
-                    btn.pack(side="left")
-                    col += 1
-                    if col % 7 == 0 and day < n_days:
-                        row_f = tk.Frame(grid, bg=TH["bg"]); row_f.pack(anchor="w")
-
-                # Buton Azi
-                tk.Button(cal_win, text=f"📅 Azi UTC ({today.strftime('%Y-%m-%d')})",
-                          command=lambda: _pick_date(today.year, today.month, today.day),
-                          bg=TH["accent"], fg="white", font=("Consolas",9), width=28).pack(pady=(0,6))
+                    tk.Label(row_f,text="",bg=TH["bg"],width=4).pack(side="left")
+                col=first_wd
+                for day in range(1,n_days+1):
+                    is_today=(y==today.year and m==today.month and day==today.day)
+                    is_sel=(day==sel_d)
+                    if is_sel: bg_c=TH["warn"]; fg_c="white"
+                    elif is_today: bg_c=TH["accent"]; fg_c="white"
+                    else:
+                        wd2=(first_wd+day-1)%7
+                        bg_c=TH["btn_bg"]; fg_c=TH["warn"] if wd2>=5 else TH["fg"]
+                    fnt_w="bold" if (is_sel or is_today) else "normal"
+                    btn=tk.Button(row_f,text=str(day),width=4,bg=bg_c,fg=fg_c,
+                                   relief="flat",activebackground=TH["accent"],
+                                   font=("Consolas",9,fnt_w),command=lambda dd=day:_pick(dd))
+                    btn.pack(side="left",pady=1)
+                    col+=1
+                    if col%7==0 and day<n_days:
+                        row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
+                tk.Frame(cal_win,bg=TH["btn_bg"],height=1).pack(fill="x",padx=6,pady=4)
+                today_str=today.strftime("%Y-%m-%d")
+                tk.Button(cal_win,text=f"  Azi UTC: {today_str}  ",
+                          command=lambda:_pick_date(today.year,today.month,today.day),
+                          bg=TH["accent"],fg="white",font=("Consolas",10,"bold"),
+                          relief="flat").pack(fill="x",padx=6,pady=(0,6))
 
             def _shift(delta):
-                m = _cm[0] + delta
-                y = _cy[0]
-                if m < 1:  m = 12; y -= 1
-                if m > 12: m = 1;  y += 1
-                _cm[0] = m; _cy[0] = y
-                _render()
-
-            def _shift_y(delta):
-                _cy[0] += delta; _render()
-
-            def _pick(day):
-                _pick_date(_cy[0], _cm[0], day)
-
-            def _pick_date(y, m, d):
-                date_str = f"{y:04d}-{m:02d}-{d:02d}"
-                _date_ent.delete(0, "end")
-                _date_ent.insert(0, date_str)
+                m2=_cm[0]+delta; y2=_cy[0]
+                if m2<1: m2=12; y2-=1
+                if m2>12: m2=1; y2+=1
+                _cm[0]=m2; _cy[0]=y2; _render()
+            def _shift_y(delta): _cy[0]+=delta; _render()
+            def _pick(day): _cd[0]=day; _pick_date(_cy[0],_cm[0],day)
+            def _pick_date(y,m,d):
+                _date_ent.delete(0,"end"); _date_ent.insert(0,f"{y:04d}-{m:02d}-{d:02d}")
                 cal_win.destroy()
 
             _render()
-            # Centrare
-            self.update_idletasks()
-            x = self.winfo_rootx() + self.winfo_width()//2 - 130
-            y_pos = self.winfo_rooty() + self.winfo_height()//2 - 160
-            cal_win.geometry(f"250x260+{x}+{y_pos}")
+            # Poziționare lângă butonul 📅 (sub el)
+            cal_win.update_idletasks()
+            _cal_btn_ref = _d_inner.winfo_children()[-1]  # butonul 📅 din _d_inner
+            bx = _cal_btn_ref.winfo_rootx()
+            by = _cal_btn_ref.winfo_rooty()
+            bh = _cal_btn_ref.winfo_height()
+            cw = cal_win.winfo_reqwidth()
+            ch = cal_win.winfo_reqheight()
+            sw = cal_win.winfo_screenwidth()
+            sh = cal_win.winfo_screenheight()
+            cx = min(bx, sw-cw-10)
+            cy = by+bh+2
+            if cy+ch > sh-40: cy = by-ch-2
+            cal_win.geometry(f"+{cx}+{cy}")
 
         tk.Button(_d_inner, text="📅", command=_open_calendar,
                   bg=TH["accent"], fg="white",
@@ -4768,15 +4757,16 @@ class App(tk.Tk):
         self.ent["mode"].set(am[(am.index(cur)+1)%len(am)] if cur in am else am[0]); self._on_mode_change()
 
     def _open_main_calendar(self):
-        """Calendar popup pentru câmpul Dată din fereastra principală."""
+        """Calendar popup pentru câmpul Dată — poziție lângă buton, memorează ziua selectată."""
         import calendar as _cal
         cal_win = tk.Toplevel(self)
-        cal_win.title("📅 Selectează Data")
+        cal_win.title("Selectează Data")
         cal_win.configure(bg=TH["bg"])
         cal_win.resizable(False, False)
         cal_win.transient(self)
         cal_win.grab_set()
         MONTH_RO = ["","Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"]
+        # Citim data curentă din câmp
         try:
             ex = self.ent["date"].get().strip()
             if re.match(r"^\d{4}-\d{2}-\d{2}$", ex):
@@ -4784,60 +4774,107 @@ class App(tk.Tk):
             else: raise ValueError
         except Exception:
             now = datetime.datetime.utcnow(); y0,m0,d0 = now.year,now.month,now.day
-        _cy=[y0]; _cm=[m0]
+        # Stare navigare + zi selectată — toate în liste mutable pentru acces din closures
+        _cy=[y0]; _cm=[m0]; _cd=[d0]  # _cd = ziua curent selectată
 
         def _render():
             for w in cal_win.winfo_children(): w.destroy()
             y,m = _cy[0],_cm[0]
-            nav = tk.Frame(cal_win,bg=TH["bg"]); nav.pack(fill="x",padx=6,pady=4)
-            tk.Button(nav,text="◄◄",command=lambda:_shift_y(-1),bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=3).pack(side="left")
-            tk.Button(nav,text="◄", command=lambda:_shift(-1),  bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=2).pack(side="left",padx=2)
-            tk.Label(nav,text=f"{MONTH_RO[m]} {y}",bg=TH["bg"],fg=TH["gold"],font=("Consolas",11,"bold"),width=12).pack(side="left",expand=True)
-            tk.Button(nav,text="►", command=lambda:_shift(1),   bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=2).pack(side="right",padx=2)
-            tk.Button(nav,text="►►",command=lambda:_shift_y(1), bg=TH["btn_bg"],fg="white",font=("Consolas",9),width=3).pack(side="right")
-            days_hdr=tk.Frame(cal_win,bg=TH["bg"]); days_hdr.pack(padx=6)
-            for d in ["Lu","Ma","Mi","Jo","Vi","S\u00e2","Du"]:
-                fg=TH["warn"] if d in ("S\u00e2","Du") else TH["fg2"]
-                tk.Label(days_hdr,text=d,bg=TH["bg"],fg=fg,font=("Consolas",9,"bold"),width=3).pack(side="left")
-            grid=tk.Frame(cal_win,bg=TH["bg"]); grid.pack(padx=6,pady=(0,6))
+            # ── Navigare lună/an ──────────────────────────────
+            nav = tk.Frame(cal_win,bg=TH["bg"]); nav.pack(fill="x",padx=6,pady=(6,2))
+            tk.Button(nav,text="<<",command=lambda:_shift_y(-1),
+                      bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="left")
+            tk.Button(nav,text=" < ",command=lambda:_shift(-1),
+                      bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="left",padx=2)
+            tk.Label(nav,text=f"  {MONTH_RO[m]} {y}  ",bg=TH["bg"],fg=TH["gold"],
+                     font=("Consolas",12,"bold")).pack(side="left",expand=True)
+            tk.Button(nav,text=" > ",command=lambda:_shift(1),
+                      bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="right",padx=2)
+            tk.Button(nav,text=">>",command=lambda:_shift_y(1),
+                      bg=TH["btn_bg"],fg="white",font=("Consolas",9,"bold"),width=3,relief="flat").pack(side="right")
+            # ── Header zile săptămână ─────────────────────────
+            days_hdr=tk.Frame(cal_win,bg=TH["bg2"] if "bg2" in TH else TH["bg"])
+            days_hdr.pack(fill="x",padx=6,pady=(2,0))
+            for d in ["Lu","Ma","Mi","Jo","Vi","Sa","Du"]:
+                fg=TH["warn"] if d in ("Sa","Du") else TH["fg2"]
+                tk.Label(days_hdr,text=d,bg=days_hdr["bg"],fg=fg,
+                         font=("Consolas",9,"bold"),width=4,anchor="center").pack(side="left")
+            # ── Grid zile ─────────────────────────────────────
+            grid=tk.Frame(cal_win,bg=TH["bg"]); grid.pack(padx=6,pady=2)
             first_wd,n_days=_cal.monthrange(y,m)
             today=datetime.datetime.utcnow()
-            sel_d=d0 if (y==y0 and m==m0) else 0
+            sel_d=_cd[0] if (y==_cy[0] and m==_cm[0]) else 0
             row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
+            # Spații goale înainte de prima zi
             for _ in range(first_wd):
-                tk.Label(row_f,text="   ",bg=TH["bg"],width=3).pack(side="left")
+                tk.Label(row_f,text="",bg=TH["bg"],width=4).pack(side="left")
             col=first_wd
             for day in range(1,n_days+1):
                 is_today=(y==today.year and m==today.month and day==today.day)
                 is_sel=(day==sel_d)
-                bg=TH["warn"] if is_sel else TH["accent"] if is_today else TH["btn_bg"]
+                if is_sel:
+                    bg_c=TH["warn"]; fg_c="white"
+                elif is_today:
+                    bg_c=TH["accent"]; fg_c="white"
+                else:
+                    wd=(first_wd+day-1)%7
+                    bg_c=TH["btn_bg"]
+                    fg_c=TH["warn"] if wd>=5 else TH["fg"]
                 fnt_w="bold" if (is_sel or is_today) else "normal"
-                btn=tk.Button(row_f,text=str(day),width=3,bg=bg,fg="white",relief="flat",
-                               font=("Consolas",9,fnt_w),command=lambda dd=day:_pick(dd))
-                btn.pack(side="left")
+                btn=tk.Button(row_f,text=str(day),width=4,bg=bg_c,fg=fg_c,
+                               relief="flat",activebackground=TH["accent"],
+                               font=("Consolas",9,fnt_w),
+                               command=lambda dd=day:_pick(dd))
+                btn.pack(side="left",pady=1)
                 col+=1
                 if col%7==0 and day<n_days:
                     row_f=tk.Frame(grid,bg=TH["bg"]); row_f.pack(anchor="w")
-            tk.Button(cal_win,text=f"📅 Azi UTC ({today.strftime('%Y-%m-%d')})",
+            # ── Separator + buton Azi ─────────────────────────
+            tk.Frame(cal_win,bg=TH["btn_bg"],height=1).pack(fill="x",padx=6,pady=4)
+            today_str=today.strftime("%Y-%m-%d")
+            tk.Button(cal_win,text=f"  Azi UTC: {today_str}  ",
                       command=lambda:_pick_date(today.year,today.month,today.day),
-                      bg=TH["accent"],fg="white",font=("Consolas",9),width=28).pack(pady=(0,6))
+                      bg=TH["accent"],fg="white",font=("Consolas",10,"bold"),
+                      relief="flat").pack(fill="x",padx=6,pady=(0,6))
 
         def _shift(delta):
-            m=_cm[0]+delta; y=_cy[0]
-            if m<1: m=12; y-=1
-            if m>12: m=1; y+=1
-            _cm[0]=m; _cy[0]=y; _render()
-        def _shift_y(delta): _cy[0]+=delta; _render()
-        def _pick(day): _pick_date(_cy[0],_cm[0],day)
+            m2=_cm[0]+delta; y2=_cy[0]
+            if m2<1:  m2=12; y2-=1
+            if m2>12: m2=1;  y2+=1
+            _cm[0]=m2; _cy[0]=y2; _render()
+
+        def _shift_y(delta):
+            _cy[0]+=delta; _render()
+
+        def _pick(day):
+            # Memorăm ziua și re-randăm pentru a o evidenția, APOI selectăm
+            _cd[0]=day
+            _pick_date(_cy[0],_cm[0],day)
+
         def _pick_date(y,m,d):
             ds=f"{y:04d}-{m:02d}-{d:02d}"
-            self.ent["date"].delete(0,"end"); self.ent["date"].insert(0,ds)
+            ent=self.ent["date"]
+            ent.config(state="normal")
+            ent.delete(0,"end")
+            ent.insert(0,ds)
             cal_win.destroy()
+
         _render()
-        self.update_idletasks()
-        x=self.winfo_rootx()+self.winfo_width()//2-130
-        y_pos=self.winfo_rooty()+self.winfo_height()//2-160
-        cal_win.geometry(f"250x270+{x}+{y_pos}")
+        # ── Poziționare lângă butonul 📅, NU în centrul ecranului ──
+        cal_win.update_idletasks()
+        btn_x = self._cal_btn_main.winfo_rootx()
+        btn_y = self._cal_btn_main.winfo_rooty()
+        btn_h = self._cal_btn_main.winfo_height()
+        cal_w = cal_win.winfo_reqwidth()
+        cal_h = cal_win.winfo_reqheight()
+        # Apare sub buton, aliniat la stânga lui
+        screen_w = cal_win.winfo_screenwidth()
+        screen_h = cal_win.winfo_screenheight()
+        x = min(btn_x, screen_w - cal_w - 10)
+        y = btn_y + btn_h + 2
+        if y + cal_h > screen_h - 40:   # dacă iese jos, apare deasupra butonului
+            y = btn_y - cal_h - 2
+        cal_win.geometry(f"+{x}+{y}")
 
     def _tog_man(self):
         m=self.man_v.get()
