@@ -4570,37 +4570,42 @@ class App(tk.Tk):
         for idx,(_,k) in enumerate(items): self.tree.move(k,"",idx)
 
     def _build_btns(self):
-        """Bara de butoane — 2 rânduri, text complet vizibil, fără trunchiere."""
+        """Bara de butoane — 2 rânduri, text complet vizibil, fără width fix."""
         BFONT = ("Consolas", 9)
-        BPAD  = 2
-        def _btn(parent, text, cmd, color, w=9):
-            tk.Button(parent, text=text, command=cmd,
-                      bg=color, fg="white",
-                      font=BFONT, width=w,
-                      relief="raised", bd=1,
-                      activebackground=color,
-                      activeforeground="white").pack(side="left", padx=BPAD, pady=1)
+        BPADX = 3
+
+        def _btn(parent, text, cmd, color):
+            """Buton auto-dimensionat după lungimea textului."""
+            b = tk.Button(parent, text=text, command=cmd,
+                          bg=color, fg="white",
+                          font=BFONT,
+                          padx=6, pady=3,
+                          relief="raised", bd=1,
+                          activebackground=color,
+                          activeforeground="white")
+            b.pack(side="left", padx=BPADX, pady=2)
+            return b
 
         # ── Rândul 1 ──
         bb1 = tk.Frame(self, bg=TH["bg"]); bb1.pack(fill="x", padx=4, pady=(4,1))
-        _btn(bb1, "⚙ " + L.t("settings"),  self._settings,       TH["warn"],   w=10)
-        _btn(bb1, "🏆 " + L.t("contests"), self._mgr,             "#C2185B",    w=10)
-        _btn(bb1, "📡 CAT",                 self._cat_dlg,         "#1a5276",    w=8)
-        _btn(bb1, "📝 Log Nou",             self._new_log_dlg,     "#2e7d32",    w=9)
-        _btn(bb1, "🎨 Teme",                self._theme_dlg,       "#6a1b9a",    w=8)
-        _btn(bb1, "📊 " + L.t("stats"),    self._stats,           "#3F51B5",    w=10)
-        _btn(bb1, "✔ " + L.t("validate"),  self._validate,        TH["ok"],     w=10)
-        _btn(bb1, "📤 " + L.t("export"),   self._export_dlg,      "#9C27B0",    w=9)
+        _btn(bb1, "⚙ " + L.t("settings"),   self._settings,        TH["warn"])
+        _btn(bb1, "🏆 " + L.t("contests"),  self._mgr,              "#C2185B")
+        _btn(bb1, "📡 CAT",                  self._cat_dlg,          "#1a5276")
+        _btn(bb1, "📝 Log Nou",              self._new_log_dlg,      "#2e7d32")
+        _btn(bb1, "🎨 Teme",                self._theme_dlg,        "#6a1b9a")
+        _btn(bb1, "📊 " + L.t("stats"),     self._stats,            "#3F51B5")
+        _btn(bb1, "✔ " + L.t("validate"),   self._validate,         TH["ok"])
+        _btn(bb1, "📤 " + L.t("export"),    self._export_dlg,       "#9C27B0")
 
         # ── Rândul 2 ──
         bb2 = tk.Frame(self, bg=TH["bg"]); bb2.pack(fill="x", padx=4, pady=(1,4))
-        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,   "#E64A19",    w=9)
-        _btn(bb2, "↩ " + L.t("undo"),        self._undo,          "#5D4037",    w=8)
-        _btn(bb2, "💾 " + L.t("backup"),     self._bak,           "#546E7A",    w=9)
-        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,    "#00796B",    w=9)
-        _btn(bb2, "⏱ Timer",                 self._timer_dlg,     "#004D40",    w=8)
-        _btn(bb2, "📝 Log Editor",            self._open_log_editor,"#1B5E20",   w=11)
-        _btn(bb2, "🌐 Callbook",              self._open_callbook,  "#1a237e",   w=10)
+        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,     "#E64A19")
+        _btn(bb2, "↩ " + L.t("undo"),        self._undo,            "#5D4037")
+        _btn(bb2, "💾 " + L.t("backup"),     self._bak,             "#546E7A")
+        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,      "#00796B")
+        _btn(bb2, "⏱ Timer",                 self._timer_dlg,       "#004D40")
+        _btn(bb2, "📝 Log Editor",            self._open_log_editor, "#1B5E20")
+        _btn(bb2, "🌐 Callbook",              self._open_callbook,   "#1a237e")
 
     def _refresh(self):
         if not self.tree: return
