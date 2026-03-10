@@ -4491,8 +4491,8 @@ class App(tk.Tk):
         rbf=tk.Frame(r1,bg=TH["bg"]); rbf.pack(side="left",padx=6)
         self.man_v=tk.BooleanVar(value=self.cfg.get("manual_dt",False))
         tk.Checkbutton(rbf,text=L.t("manual"),variable=self.man_v,bg=TH["bg"],fg=TH["fg"],selectcolor=TH["entry_bg"],activebackground=TH["bg"],command=self._tog_man).pack()
-        self.log_btn=tk.Button(rbf,text=L.t("log"),command=self._add_qso,bg=TH["accent"],fg="white",font=self.fb,width=10); self.log_btn.pack(pady=1)
-        tk.Button(rbf,text=L.t("reset"),command=self._full_clr,bg=TH["btn_bg"],fg=TH["btn_fg"],font=self.fn,width=10).pack(pady=1)
+        self.log_btn=tk.Button(rbf,text=L.t("log"),command=self._add_qso,bg=TH["accent"],fg="white",font=self.fb,padx=8); self.log_btn.pack(pady=1,fill="x")
+        tk.Button(rbf,text=L.t("reset"),command=self._full_clr,bg=TH["btn_bg"],fg=TH["btn_fg"],font=self.fn,padx=8).pack(pady=1,fill="x")
         r2=tk.Frame(ip,bg=TH["bg"]); r2.pack(fill="x",pady=(6,0))
         tk.Label(r2,text=L.t("date_l"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=3)
         self.ent["date"]=tk.Entry(r2,width=11,bg=TH["entry_bg"],fg=TH["fg"],font=self.fn,justify="center",state="disabled"); self.ent["date"].pack(side="left",padx=2)
@@ -4680,7 +4680,10 @@ class App(tk.Tk):
         if not isinstance(self.log,list): self.log=[]
         if self.edit_idx is not None and self.edit_idx>=len(self.log):
             self.edit_idx=None
-            if self.log_btn: self.log_btn.config(text=L.t("log"),bg=TH["accent"])
+            if self.log_btn:
+                self.log_btn.config(text=L.t("log"),bg=TH["accent"])
+                try: self.log_btn.config(width=0)
+                except Exception: pass
         dup,di=Score.is_dup(self.log,call,band,mode,self.edit_idx)
         if dup and self.edit_idx is None:
             if self._sounds(): beep("warning")
@@ -4698,7 +4701,10 @@ class App(tk.Tk):
         if "sr" in self.ent: q["sr"]=self.ent["sr"].get().strip()
         if self.edit_idx is not None:
             self.log[self.edit_idx]=q; self.edit_idx=None
-            if self.log_btn: self.log_btn.config(text=L.t("log"),bg=TH["accent"])
+            if self.log_btn:
+                self.log_btn.config(text=L.t("log"),bg=TH["accent"])
+                try: self.log_btn.config(width=0)
+                except Exception: pass
         else: self.log.insert(0,q); self.undo_stack.append(("add",0,q)); self.serial+=1
         self._clr(); self._refresh(); DM.save_log(self._cid(),self.log)
 
@@ -4757,7 +4763,10 @@ class App(tk.Tk):
             self.ent[k].delete(0,"end"); self.ent[k].insert(0,q.get(fk,""))
         for k in ["ss","sr"]:
             if k in self.ent: self.ent[k].delete(0,"end"); self.ent[k].insert(0,q.get(k,""))
-        if self.log_btn: self.log_btn.config(text=L.t("update"),bg=TH["warn"])
+        if self.log_btn:
+            self.log_btn.config(text=L.t("update"),bg=TH["warn"])
+            try: self.log_btn.config(width=0)
+            except Exception: pass
 
     def _del_sel(self):
         sel=self.tree.selection()
