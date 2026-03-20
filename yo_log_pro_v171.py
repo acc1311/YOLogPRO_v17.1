@@ -1814,6 +1814,57 @@ class CalendarPopup(tk.Toplevel):
         import calendar
         return calendar.monthrange(self.year, self.month)[1]
 
+
+# ══════════════════════ CAB3 CONFIG DIALOG ═══════════════════
+class Cab3ConfigDialog(tk.Toplevel):
+    """Dialog configurare export Cabrillo 3.0."""
+    def __init__(self,parent,cfg):
+        super().__init__(parent); self.result=None; self.cfg=cfg
+        self.title("Configurare Cabrillo 3.0")
+        _responsive_geometry(self,parent,460,340)
+        self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
+        lo={"bg":TH["bg"],"fg":TH["fg"],"font":("Consolas",11)}
+
+        # ── Format data ──────────────────────────────────────
+        tk.Label(self,text="Format data QSO:" if L.g()=="ro" else "QSO Date Format:",**lo).pack(anchor="w",padx=15,pady=(15,0))
+        self._date_opts = ["YYYYMMDD (standard Cabrillo 3.0)","YYYY-MM-DD (cu liniute)"] if L.g()=="ro" else ["YYYYMMDD (Cabrillo 3.0 standard)","YYYY-MM-DD (with dashes)"]
+        saved_fmt = cfg.get("cab3_date_fmt","no_dash")
+        default_fmt = self._date_opts[0] if saved_fmt != "with_dash" else self._date_opts[1]
+        self._date_v = tk.StringVar(value=default_fmt)
+        ttk.Combobox(self,textvariable=self._date_v,values=self._date_opts,state="readonly",width=34,font=("Consolas",11)).pack(padx=15,pady=4)
+
+        # ── Operator ─────────────────────────────────────────
+        tk.Label(self,text="Tip operator:" if L.g()=="ro" else "Operator type:",**lo).pack(anchor="w",padx=15,pady=(10,0))
+        self._op_opts = ["SINGLE-OP","MULTI-OP","CHECKLOG"]
+        saved_op = cfg.get("cab3_operator","SINGLE-OP")
+        self._op_v = tk.StringVar(value=saved_op if saved_op in self._op_opts else "SINGLE-OP")
+        ttk.Combobox(self,textvariable=self._op_v,values=self._op_opts,state="readonly",width=34,font=("Consolas",11)).pack(padx=15,pady=4)
+
+        # ── Putere ───────────────────────────────────────────
+        tk.Label(self,text="Categorie putere:" if L.g()=="ro" else "Power category:",**lo).pack(anchor="w",padx=15,pady=(10,0))
+        self._pwr_opts = ["HIGH","LOW","QRP"]
+        pw = int(cfg.get("power","100"))
+        auto_pwr = "QRP" if pw<=5 else ("LOW" if pw<=100 else "HIGH")
+        saved_pwr = cfg.get("cab3_power",auto_pwr)
+        self._pwr_v = tk.StringVar(value=saved_pwr if saved_pwr in self._pwr_opts else auto_pwr)
+        ttk.Combobox(self,textvariable=self._pwr_v,values=self._pwr_opts,state="readonly",width=34,font=("Consolas",11)).pack(padx=15,pady=4)
+
+        # ── Butoane ──────────────────────────────────────────
+        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=14)
+        tk.Button(bf,text="Exporta" if L.g()=="ro" else "Export",command=self._ok,
+                  bg=TH["ok"],fg="white",font=("Consolas",12,"bold"),width=12).pack(side="left",padx=8)
+        tk.Button(bf,text=L.t("cancel"),command=self.destroy,
+                  bg=TH["btn_bg"],fg="white",font=("Consolas",12),width=10).pack(side="left",padx=8)
+        center_dialog(self,parent)
+
+    def _ok(self):
+        date_fmt = "with_dash" if self._date_v.get()==self._date_opts[1] else "no_dash"
+        self.result={
+            "date_fmt": date_fmt,
+            "operator": self._op_v.get(),
+            "power":    self._pwr_v.get(),
+        }; self.destroy()
+
 class Cab2ConfigDialog(tk.Toplevel):
     def __init__(self,parent,cfg):
         super().__init__(parent); self.result=None; self.cfg=cfg; self.title(L.t("cab2_config")); _responsive_geometry(self, parent, 440, 270); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
@@ -1833,12 +1884,21 @@ class Cab2ConfigDialog(tk.Toplevel):
         for d,k in self._rcvd_labels.items():
             if k==saved_r: default_rcvd=d; break
         self._rcvd_v=tk.StringVar(value=default_rcvd); ttk.Combobox(self,textvariable=self._rcvd_v,values=self._rcvd_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
-        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=18)
+        # ── Format data QSO ──────────────────────────────────
+        date_label = "Format data QSO:" if L.g()=="ro" else "QSO Date Format:"
+        tk.Label(self,text=date_label,bg=TH["bg"],fg=TH["fg"],font=("Consolas",11)).pack(anchor="w",padx=15,pady=(10,0))
+        self._date_fmt_opts = ["YYYY-MM-DD (standard Cabrillo)", "YYYYMMDD (fara liniute)"] if L.g()=="ro" else ["YYYY-MM-DD (Cabrillo standard)", "YYYYMMDD (no dashes)"]
+        saved_fmt = cfg.get("cab2_date_fmt","with_dash")
+        default_fmt = self._date_fmt_opts[0] if saved_fmt != "no_dash" else self._date_fmt_opts[1]
+        self._date_fmt_v = tk.StringVar(value=default_fmt)
+        ttk.Combobox(self,textvariable=self._date_fmt_v,values=self._date_fmt_opts,state="readonly",width=34,font=("Consolas",11)).pack(padx=15,pady=4)
+        bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=14)
         tk.Button(bf,text=L.t("cab2_export"),command=self._ok,bg=TH["ok"],fg="white",font=("Consolas",12,"bold"),width=14).pack(side="left",padx=8)
         tk.Button(bf,text=L.t("cancel"),command=self.destroy,bg=TH["btn_bg"],fg="white",font=("Consolas",12),width=10).pack(side="left",padx=8)
         center_dialog(self,parent)
     def _ok(self):
-        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log")}; self.destroy()
+        date_fmt = "no_dash" if self._date_fmt_v.get()==self._date_fmt_opts[1] else "with_dash"
+        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log"),"date_fmt":date_fmt}; self.destroy()
 
 class PreviewDialog(tk.Toplevel):
     def __init__(self,parent,title_str,content,save_callback):
@@ -2605,13 +2665,40 @@ class LogEditorWindow(tk.Toplevel):
         _lbl_ent(r2, "Nr Serial S", "ss",   7)
         _lbl_ent(r2, "Nr Serial R", "sr",   7)
         _lbl_ent(r2, "Notă / Locator", "note", 22)
-        _lbl_ent(r2, "Dată (YYYY-MM-DD)", "date", 12)
-        _lbl_ent(r2, "Oră (HH:MM)", "time", 8)
+        _lbl_ent(r2, "Data", "date", 12)
+        # Buton calendar langa data in editor
+        _cal_frm = tk.Frame(r2, bg=TH["bg"]); _cal_frm.pack(side="left", padx=0)
+        tk.Label(_cal_frm, text=" ", bg=TH["bg"], fg=TH["bg"], font=("Consolas",8)).pack()
+        tk.Button(_cal_frm, text="📅", command=lambda: self._open_editor_calendar(),
+                  bg="#1a5276", fg="white", font=("Consolas",9), width=2).pack()
+        _lbl_ent(r2, "Ora (HH:MM)", "time", 8)
+        # Binding normalizare ora in editor
+        if "time" in self._ent:
+            self._ent["time"].bind("<FocusOut>", lambda e: self._normalize_editor_time())
+            self._ent["time"].bind("<Return>",   lambda e: self._normalize_editor_time())
 
         # Undo stack local
         self._undo_stack = deque(maxlen=50)
 
     # ── Context menu ───────────────────────────────────────
+    def _open_editor_calendar(self):
+        """Deschide calendar popup pentru campul data din Log Editor."""
+        if "date" not in self._ent: return
+        current = self._ent["date"].get().strip()
+        def _set_date(date_str):
+            self._ent["date"].delete(0,"end")
+            self._ent["date"].insert(0, date_str)
+        CalendarPopup(self._ent["date"], current, _set_date)
+
+    def _normalize_editor_time(self):
+        """Normalizeaza ora scrisa liber in Log Editor."""
+        if "time" not in self._ent: return
+        raw = self._ent["time"].get().strip()
+        norm = _normalize_time(raw)
+        if norm != raw:
+            self._ent["time"].delete(0,"end")
+            self._ent["time"].insert(0, norm)
+
     def _ctx_menu(self, event):
         ctx = tk.Menu(self, tearoff=0)
         ctx.add_command(label="✏ Editează",    command=self._load_into_form)
@@ -4643,24 +4730,24 @@ class App(tk.Tk):
 
         # ── Rândul 1 ──
         bb1 = tk.Frame(bar_inner, bg=TH["bg"]); bb1.pack(fill="x", padx=4, pady=(4,1))
-        _btn(bb1, "⚙ " + L.t("settings"),  self._settings,       TH["warn"])
-        _btn(bb1, "🏆 " + L.t("contests"), self._mgr,             "#C2185B")
-        _btn(bb1, "📡 CAT",                 self._cat_dlg,         "#1a5276")
-        _btn(bb1, "📝 Log Nou",             self._new_log_dlg,     "#2e7d32")
-        _btn(bb1, "🎨 Teme",                self._theme_dlg,       "#6a1b9a")
-        _btn(bb1, "📊 " + L.t("stats"),    self._stats,           "#3F51B5")
-        _btn(bb1, "✔ " + L.t("validate"),  self._validate,        TH["ok"])
-        _btn(bb1, "📤 " + L.t("export"),   self._export_dlg,      "#9C27B0")
+        _btn(bb1, L.t("settings"),   self._settings,       TH["warn"])
+        _btn(bb1, L.t("contests"),   self._mgr,             "#C2185B")
+        _btn(bb1, "CAT",             self._cat_dlg,         "#1a5276")
+        _btn(bb1, "Log Nou",         self._new_log_dlg,     "#2e7d32")
+        _btn(bb1, "Teme",            self._theme_dlg,       "#6a1b9a")
+        _btn(bb1, L.t("stats"),      self._stats,           "#3F51B5")
+        _btn(bb1, L.t("validate"),   self._validate,        TH["ok"])
+        _btn(bb1, L.t("export"),     self._export_dlg,      "#9C27B0")
 
         # ── Rândul 2 ──
         bb2 = tk.Frame(bar_inner, bg=TH["bg"]); bb2.pack(fill="x", padx=4, pady=(1,4))
-        _btn(bb2, "📥 " + L.t("import_log"), self._import_menu,   "#E64A19")
-        _btn(bb2, "↩ " + L.t("undo"),        self._undo,          "#5D4037")
-        _btn(bb2, "💾 " + L.t("backup"),     self._bak,           "#546E7A")
-        _btn(bb2, "🔍 " + L.t("search"),     self._search_dlg,    "#00796B")
-        _btn(bb2, "⏱ Timer",                 self._timer_dlg,     "#004D40")
-        _btn(bb2, "📝 Log Editor",            self._open_log_editor,"#1B5E20")
-        _btn(bb2, "🌐 Callbook",              self._open_callbook,  "#1a237e")
+        _btn(bb2, L.t("import_log"),  self._import_menu,    "#E64A19")
+        _btn(bb2, L.t("undo"),         self._undo,           "#5D4037")
+        _btn(bb2, L.t("backup"),       self._bak,            "#546E7A")
+        _btn(bb2, L.t("search"),       self._search_dlg,     "#00796B")
+        _btn(bb2, "Timer",             self._timer_dlg,      "#004D40")
+        _btn(bb2, "Log Editor",        self._open_log_editor, "#1B5E20")
+        _btn(bb2, "Callbook",          self._open_callbook,   "#1a237e")
 
     def _refresh(self):
         if not self.tree: return
@@ -5146,18 +5233,36 @@ class App(tk.Tk):
 
     def _exp_cab(self,parent=None):
         if not self._check_before_export(): return
+        cfg_dlg=Cab3ConfigDialog(self,self.cfg); self.wait_window(cfg_dlg)
+        if not cfg_dlg.result: return
+        date_fmt   = cfg_dlg.result["date_fmt"]
+        cat_oper   = cfg_dlg.result["operator"]
+        cat_power  = cfg_dlg.result["power"]
+        self.cfg["cab3_date_fmt"]=date_fmt; self.cfg["cab3_operator"]=cat_oper; self.cfg["cab3_power"]=cat_power
+        DM.save("config.json",self.cfg)
         try:
             my=self.cfg.get("call","NOCALL"); cc=self._cc()
             nm=cc.get("cabrillo_name","") or cc.get("name_en",cc.get("name_ro","CONTEST"))
-            pw=int(self.cfg.get("power","100")); cat_power="QRP" if pw<=5 else ("LOW" if pw<=100 else "HIGH")
             ef=cc.get("exchange_format","none")
-            lines=["START-OF-LOG: 3.0",f"CONTEST: {nm}",f"CALLSIGN: {my}",f"GRID-LOCATOR: {self.cfg.get('loc','')}","CATEGORY-OPERATOR: SINGLE-OP","CATEGORY-BAND: ALL",f"CATEGORY-POWER: {cat_power}","CATEGORY-MODE: MIXED",f"NAME: {self.cfg.get('op_name','')}",f"ADDRESS: {self.cfg.get('addr','')}","SOAPBOX: Logged with YO Log PRO v17.1",f"SOAPBOX: {self.cfg.get('soapbox','73 GL')}","CREATED-BY: YO Log PRO v17.0"]
+            lines=["START-OF-LOG: 3.0",f"CONTEST: {nm}",f"CALLSIGN: {my}",
+                   f"GRID-LOCATOR: {self.cfg.get('loc','')}",
+                   f"CATEGORY-OPERATOR: {cat_oper}","CATEGORY-BAND: ALL",
+                   f"CATEGORY-POWER: {cat_power}","CATEGORY-MODE: MIXED",
+                   f"NAME: {self.cfg.get('op_name','')}",f"ADDRESS: {self.cfg.get('addr','')}",
+                   "SOAPBOX: Logged with YO Log PRO v17.1",
+                   f"SOAPBOX: {self.cfg.get('soapbox','73 GL')}",
+                   "CREATED-BY: YO Log PRO v17.1"]
             for q in self.log:
                 freq=q.get("f","") or str(BAND_FREQ.get(q.get("b",""),0))
                 try: freq=str(int(float(freq)))
                 except Exception: pass
                 es=self._resolve_exchange_sent(q,ef); er=self._resolve_exchange_rcvd(q,"log")
-                date=q.get("d","").replace("-",""); time=q.get("t","").replace(":","")
+                d_raw=q.get("d","").replace("-","")
+                if len(d_raw)==8:
+                    date=f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}" if date_fmt=="with_dash" else d_raw
+                else:
+                    date=q.get("d","")
+                time=q.get("t","").replace(":","")
                 lines.append(f"QSO: {freq:>6} {q.get('m','SSB'):<5} {date} {time} {my:<13} {q.get('s','59'):<4} {es:<10} {q.get('c',''):<13} {q.get('r','59'):<4} {er}")
             lines.append("END-OF-LOG:"); content="\n".join(lines)
             def do_save(text):
@@ -5173,8 +5278,8 @@ class App(tk.Tk):
         if not self._check_before_export(): return
         cfg_dlg=Cab2ConfigDialog(self,self.cfg); self.wait_window(cfg_dlg)
         if not cfg_dlg.result: return
-        exch_sent_mode=cfg_dlg.result["sent"]; exch_rcvd_mode=cfg_dlg.result["rcvd"]
-        self.cfg["cab2_exch_sent"]=exch_sent_mode; self.cfg["cab2_exch_rcvd"]=exch_rcvd_mode; DM.save("config.json",self.cfg)
+        exch_sent_mode=cfg_dlg.result["sent"]; exch_rcvd_mode=cfg_dlg.result["rcvd"]; date_fmt=cfg_dlg.result.get("date_fmt","with_dash")
+        self.cfg["cab2_exch_sent"]=exch_sent_mode; self.cfg["cab2_exch_rcvd"]=exch_rcvd_mode; self.cfg["cab2_date_fmt"]=date_fmt; DM.save("config.json",self.cfg)
         try:
             my=self.cfg.get("call","NOCALL"); cc=self._cc()
             nm=(cc.get("cabrillo_name","") or cc.get("name_en",cc.get("name_ro","CONTEST"))).upper()
@@ -5192,8 +5297,11 @@ class App(tk.Tk):
                 try: freq=str(int(float(freq)))
                 except Exception: pass
                 mode=CAB2_MODE_MAP.get(q.get("m","SSB"),"PH")
-                date=q.get("d","")
-                if len(date)==8 and "-" not in date: date=f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+                d_raw=q.get("d","").replace("-","")
+                if len(d_raw)==8:
+                    date=f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}" if date_fmt=="with_dash" else d_raw
+                else:
+                    date=q.get("d","")
                 time_str=q.get("t","").replace(":","")[:4]
                 es=self._resolve_exchange_sent(q,exch_sent_mode); er=self._resolve_exchange_rcvd(q,exch_rcvd_mode)
                 lines.append(f"QSO: {freq} {mode} {date} {time_str} {my:<13} {q.get('s','59'):>2}  {es:<2} {q.get('c',''):<13} {q.get('r','59'):>2}  {er:<2}")
