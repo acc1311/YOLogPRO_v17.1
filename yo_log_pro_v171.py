@@ -36,6 +36,23 @@ CHANGELOG v16.x:
 """
 
 import os, sys, re, csv, copy, json, math, datetime, io, hashlib
+
+def _normalize_time(raw):
+    """Converteste ora introdusa liber la format HH:MM.
+    Exemple: '752' -> '07:52', '1321' -> '13:21', '7:52' -> '07:52', '0752' -> '07:52'
+    """
+    if not raw: return "00:00"
+    t = raw.strip().replace(":", "").replace(".", "")
+    if not t.isdigit(): return raw.strip()
+    if len(t) <= 2:
+        return f"00:{int(t):02d}"
+    elif len(t) == 3:
+        return f"{int(t[0]):02d}:{t[1:]}"
+    elif len(t) >= 4:
+        return f"{t[:2]}:{t[2:4]}"
+    return raw.strip()
+
+
 try:
     from pathlib import Path
 except ImportError:
@@ -1661,6 +1678,142 @@ class StatsWindow(tk.Toplevel):
         else: w("  (no scoring)\n","warn")
         txt.config(state="disabled"); tk.Button(self,text=L.t("close"),command=self.destroy,bg=TH["btn_bg"],fg="white").pack(pady=6)
 
+
+# ══════════════════════ CALENDAR POPUP ═══════════════════════
+class CalendarPopup(tk.Toplevel):
+    """Mini-calendar popup fara dependente externe."""
+    def __init__(self, parent, current_date_str, callback):
+        super().__init__(parent)
+        self.callback = callback
+        self.overrideredirect(True)  # fara bara de titlu
+        self.configure(bg=TH["bg"])
+        self.resizable(False, False)
+
+        try:
+            dt = datetime.datetime.strptime(current_date_str.strip(), "%Y-%m-%d")
+        except Exception:
+            dt = datetime.datetime.utcnow()
+        self.year  = dt.year
+        self.month = dt.month
+        self.sel_day = dt.day
+
+        self._build()
+        self._render()
+
+        # Pozitionare sub widget parinte
+        self.update_idletasks()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty() + parent.winfo_height() + 2
+        sw = self.winfo_screenwidth(); sh = self.winfo_screenheight()
+        w  = self.winfo_width();  h  = self.winfo_height()
+        if px + w > sw: px = sw - w - 4
+        if py + h > sh: py = parent.winfo_rooty() - h - 2
+        self.geometry(f"+{px}+{py}")
+
+        self.grab_set()
+        self.focus_set()
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<FocusOut>", self._on_focus_out)
+
+    def _on_focus_out(self, e):
+        # Inchide doar daca focus-ul iese complet din popup
+        self.after(100, lambda: self.destroy() if not self.focus_displayof() else None)
+
+    def _build(self):
+        lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 10)}
+        # ── Header luna/an ─────────────────────────────────
+        hf = tk.Frame(self, bg=TH["bg"]); hf.pack(fill="x", padx=4, pady=4)
+        tk.Button(hf, text="◀", command=self._prev_month,
+                  bg=TH["btn_bg"], fg=TH["btn_fg"], font=("Consolas",10), bd=0,
+                  width=2, cursor="hand2").pack(side="left")
+        self.hdr_lbl = tk.Label(hf, text="", bg=TH["bg"], fg=TH["gold"] if "gold" in TH else TH["fg"],
+                                 font=("Consolas", 11, "bold"), width=16)
+        self.hdr_lbl.pack(side="left", expand=True)
+        tk.Button(hf, text="▶", command=self._next_month,
+                  bg=TH["btn_bg"], fg=TH["btn_fg"], font=("Consolas",10), bd=0,
+                  width=2, cursor="hand2").pack(side="right")
+
+        # ── Zile saptamana ──────────────────────────────────
+        wf = tk.Frame(self, bg=TH["bg"]); wf.pack(fill="x", padx=4)
+        for i, d in enumerate(["Lu","Ma","Mi","Jo","Vi","Sâ","Du"]):
+            fg = TH.get("err","#e74c3c") if i == 6 else TH["fg"]
+            tk.Label(wf, text=d, bg=TH["bg"], fg=fg,
+                     font=("Consolas",9,"bold"), width=3).grid(row=0, column=i, padx=1)
+
+        # ── Grid zile ───────────────────────────────────────
+        self.grid_f = tk.Frame(self, bg=TH["bg"]); self.grid_f.pack(fill="both", padx=4, pady=(2,4))
+
+        # ── Buton Azi ────────────────────────────────────────
+        bf = tk.Frame(self, bg=TH["bg"]); bf.pack(pady=(0,4))
+        tk.Button(bf, text="Azi", command=self._set_today,
+                  bg=TH["accent"], fg="white", font=("Consolas",9), width=8,
+                  cursor="hand2", bd=0, relief="flat").pack()
+
+    def _render(self):
+        import calendar
+        for w in self.grid_f.winfo_children():
+            w.destroy()
+
+        LUNI = ["Ianuarie","Februarie","Martie","Aprilie","Mai","Iunie",
+                "Iulie","August","Septembrie","Octombrie","Noiembrie","Decembrie"]
+        self.hdr_lbl.config(text=f"{LUNI[self.month-1]} {self.year}")
+
+        cal = calendar.monthcalendar(self.year, self.month)
+        today = datetime.datetime.utcnow()
+
+        for r, week in enumerate(cal):
+            for c, day in enumerate(week):
+                if day == 0:
+                    tk.Label(self.grid_f, text="", bg=TH["bg"], width=3).grid(row=r, column=c, padx=1, pady=1)
+                    continue
+                is_sel   = (day == self.sel_day)
+                is_today = (day == today.day and self.month == today.month and self.year == today.year)
+                is_sun   = (c == 6)
+
+                if is_sel:
+                    bg = TH["accent"]; fg = "white"
+                elif is_today:
+                    bg = TH.get("gold", "#f39c12"); fg = TH["bg"]
+                elif is_sun:
+                    bg = TH["bg"]; fg = TH.get("err", "#e74c3c")
+                else:
+                    bg = TH["bg"]; fg = TH["fg"]
+
+                btn = tk.Button(self.grid_f, text=str(day), bg=bg, fg=fg,
+                                font=("Consolas", 9, "bold" if is_sel or is_today else "normal"),
+                                width=3, bd=0, relief="flat", cursor="hand2",
+                                command=lambda d=day: self._pick(d))
+                btn.grid(row=r, column=c, padx=1, pady=1)
+                btn.bind("<Enter>", lambda e, b=btn, d=day: b.config(bg=TH["accent"], fg="white") if d != self.sel_day else None)
+                btn.bind("<Leave>", lambda e, b=btn, bg_=bg, fg_=fg: b.config(bg=bg_, fg=fg_))
+
+    def _pick(self, day):
+        self.sel_day = day
+        date_str = f"{self.year:04d}-{self.month:02d}-{day:02d}"
+        self.callback(date_str)
+        self.destroy()
+
+    def _set_today(self):
+        today = datetime.datetime.utcnow()
+        self.year = today.year; self.month = today.month; self.sel_day = today.day
+        self._pick(today.day)
+
+    def _prev_month(self):
+        self.month -= 1
+        if self.month < 1: self.month = 12; self.year -= 1
+        self.sel_day = min(self.sel_day, self._days_in_month())
+        self._render()
+
+    def _next_month(self):
+        self.month += 1
+        if self.month > 12: self.month = 1; self.year += 1
+        self.sel_day = min(self.sel_day, self._days_in_month())
+        self._render()
+
+    def _days_in_month(self):
+        import calendar
+        return calendar.monthrange(self.year, self.month)[1]
+
 class Cab2ConfigDialog(tk.Toplevel):
     def __init__(self,parent,cfg):
         super().__init__(parent); self.result=None; self.cfg=cfg; self.title(L.t("cab2_config")); _responsive_geometry(self, parent, 440, 270); self.configure(bg=TH["bg"]); self.transient(parent); self.grab_set()
@@ -1680,21 +1833,12 @@ class Cab2ConfigDialog(tk.Toplevel):
         for d,k in self._rcvd_labels.items():
             if k==saved_r: default_rcvd=d; break
         self._rcvd_v=tk.StringVar(value=default_rcvd); ttk.Combobox(self,textvariable=self._rcvd_v,values=self._rcvd_values,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
-        # ── Format dată QSO ──
-        date_label = "Format dată QSO:" if L.g()=="ro" else "QSO Date Format:"
-        tk.Label(self,text=date_label,**lo).pack(anchor="w",padx=15,pady=(10,0))
-        self._date_fmt_opts = ["YYYY-MM-DD (standard Cabrillo)", "YYYYMMDD (fără liniuțe)"] if L.g()=="ro" else ["YYYY-MM-DD (Cabrillo standard)", "YYYYMMDD (no dashes)"]
-        saved_fmt = cfg.get("cab2_date_fmt", "with_dash")
-        default_fmt = self._date_fmt_opts[0] if saved_fmt != "no_dash" else self._date_fmt_opts[1]
-        self._date_fmt_v = tk.StringVar(value=default_fmt)
-        ttk.Combobox(self,textvariable=self._date_fmt_v,values=self._date_fmt_opts,state="readonly",width=30,font=("Consolas",11)).pack(padx=15,pady=4)
         bf=tk.Frame(self,bg=TH["bg"]); bf.pack(pady=18)
         tk.Button(bf,text=L.t("cab2_export"),command=self._ok,bg=TH["ok"],fg="white",font=("Consolas",12,"bold"),width=14).pack(side="left",padx=8)
         tk.Button(bf,text=L.t("cancel"),command=self.destroy,bg=TH["btn_bg"],fg="white",font=("Consolas",12),width=10).pack(side="left",padx=8)
         center_dialog(self,parent)
     def _ok(self):
-        date_fmt = "no_dash" if self._date_fmt_v.get() == self._date_fmt_opts[1] else "with_dash"
-        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log"),"date_fmt":date_fmt}; self.destroy()
+        self.result={"sent":self._sent_labels.get(self._sent_v.get(),"none"),"rcvd":self._rcvd_labels.get(self._rcvd_v.get(),"log")}; self.destroy()
 
 class PreviewDialog(tk.Toplevel):
     def __init__(self,parent,title_str,content,save_callback):
@@ -2613,7 +2757,7 @@ class LogEditorWindow(tk.Toplevel):
             "sr": _get("sr"),
             "n": _get("note"),
             "d": _get("date"),
-            "t": _get("time"),
+            "t": _normalize_time(_get("time")),
         }
 
     def _focus_call_field(self):
@@ -4391,8 +4535,15 @@ class App(tk.Tk):
         r2=tk.Frame(ip,bg=TH["bg"]); r2.pack(fill="x",pady=(6,0))
         tk.Label(r2,text=L.t("date_l"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=3)
         self.ent["date"]=tk.Entry(r2,width=11,bg=TH["entry_bg"],fg=TH["fg"],font=self.fn,justify="center",state="disabled"); self.ent["date"].pack(side="left",padx=2)
+        self._cal_btn=tk.Button(r2,text="📅",bg=TH["btn_bg"],fg=TH["btn_fg"],font=("Consolas",10),
+                                bd=0,relief="flat",cursor="hand2",
+                                command=self._open_calendar)
+        self._cal_btn.pack(side="left",padx=(0,4))
+        if not self.man_v.get(): self._cal_btn.config(state="disabled")
         tk.Label(r2,text=L.t("time_l"),bg=TH["bg"],fg=TH["fg"],font=self.fn).pack(side="left",padx=3)
         self.ent["time"]=tk.Entry(r2,width=7,bg=TH["entry_bg"],fg=TH["fg"],font=self.fn,justify="center",state="disabled"); self.ent["time"].pack(side="left",padx=2)
+        self.ent["time"].bind("<FocusOut>", lambda e: self._auto_format_time())
+        self.ent["time"].bind("<Return>",   lambda e: self._auto_format_time())
         now=datetime.datetime.utcnow()
         for k,v in [("date",now.strftime("%Y-%m-%d")),("time",now.strftime("%H:%M"))]:
             self.ent[k].config(state="normal"); self.ent[k].insert(0,v)
@@ -4552,7 +4703,15 @@ class App(tk.Tk):
             except Exception: pass
 
     def _get_dt(self):
-        if self.man_v and self.man_v.get(): return self.ent["date"].get().strip(),self.ent["time"].get().strip()
+        if self.man_v and self.man_v.get():
+            raw_time = self.ent["time"].get().strip()
+            norm_time = _normalize_time(raw_time)
+            # Actualizeaza Entry-ul cu ora normalizata
+            self.ent["time"].config(state="normal")
+            self.ent["time"].delete(0,"end")
+            self.ent["time"].insert(0, norm_time)
+            if not self.man_v.get(): self.ent["time"].config(state="disabled")
+            return self.ent["date"].get().strip(), norm_time
         now=datetime.datetime.utcnow(); return now.strftime("%Y-%m-%d"),now.strftime("%H:%M")
 
     def _resolve_exchange_sent(self,q,mode="none"):
@@ -4780,9 +4939,30 @@ class App(tk.Tk):
     def _tog_man(self):
         m=self.man_v.get()
         self.ent["date"].config(state="normal" if m else "disabled"); self.ent["time"].config(state="normal" if m else "disabled")
+        if hasattr(self,"_cal_btn"): self._cal_btn.config(state="normal" if m else "disabled")
         if self.led_c: self.led_c.itemconfig(self.led,fill=TH["led_off"] if m else TH["led_on"])
         if self.st_lbl: self.st_lbl.config(text=L.t("offline") if m else L.t("online"),fg=TH["led_off"] if m else TH["led_on"])
         self.cfg["manual_dt"]=m
+        DM.save("config.json",self.cfg)
+
+    def _auto_format_time(self):
+        """Normalizeaza ora scrisa liber in Entry-ul manual."""
+        if not (self.man_v and self.man_v.get()): return
+        raw = self.ent["time"].get().strip()
+        norm = _normalize_time(raw)
+        if norm != raw:
+            self.ent["time"].config(state="normal")
+            self.ent["time"].delete(0, "end")
+            self.ent["time"].insert(0, norm)
+
+    def _open_calendar(self):
+        current = self.ent["date"].get().strip()
+        def _set_date(date_str):
+            self.ent["date"].config(state="normal")
+            self.ent["date"].delete(0,"end")
+            self.ent["date"].insert(0, date_str)
+            if not self.man_v.get(): self.ent["date"].config(state="disabled")
+        CalendarPopup(self._cal_btn, current, _set_date)
 
     def _save_cat(self):
         if self.cat_v:
@@ -4993,8 +5173,8 @@ class App(tk.Tk):
         if not self._check_before_export(): return
         cfg_dlg=Cab2ConfigDialog(self,self.cfg); self.wait_window(cfg_dlg)
         if not cfg_dlg.result: return
-        exch_sent_mode=cfg_dlg.result["sent"]; exch_rcvd_mode=cfg_dlg.result["rcvd"]; date_fmt=cfg_dlg.result.get("date_fmt","with_dash")
-        self.cfg["cab2_exch_sent"]=exch_sent_mode; self.cfg["cab2_exch_rcvd"]=exch_rcvd_mode; self.cfg["cab2_date_fmt"]=date_fmt; DM.save("config.json",self.cfg)
+        exch_sent_mode=cfg_dlg.result["sent"]; exch_rcvd_mode=cfg_dlg.result["rcvd"]
+        self.cfg["cab2_exch_sent"]=exch_sent_mode; self.cfg["cab2_exch_rcvd"]=exch_rcvd_mode; DM.save("config.json",self.cfg)
         try:
             my=self.cfg.get("call","NOCALL"); cc=self._cc()
             nm=(cc.get("cabrillo_name","") or cc.get("name_en",cc.get("name_ro","CONTEST"))).upper()
@@ -5012,11 +5192,8 @@ class App(tk.Tk):
                 try: freq=str(int(float(freq)))
                 except Exception: pass
                 mode=CAB2_MODE_MAP.get(q.get("m","SSB"),"PH")
-                d_raw=q.get("d","").replace("-","")  # normalizează la YYYYMMDD
-                if len(d_raw)==8:
-                    date=f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}" if date_fmt=="with_dash" else d_raw
-                else:
-                    date=q.get("d","")
+                date=q.get("d","")
+                if len(date)==8 and "-" not in date: date=f"{date[:4]}-{date[4:6]}-{date[6:8]}"
                 time_str=q.get("t","").replace(":","")[:4]
                 es=self._resolve_exchange_sent(q,exch_sent_mode); er=self._resolve_exchange_rcvd(q,exch_rcvd_mode)
                 lines.append(f"QSO: {freq} {mode} {date} {time_str} {my:<13} {q.get('s','59'):>2}  {es:<2} {q.get('c',''):<13} {q.get('r','59'):>2}  {er:<2}")
