@@ -1,168 +1,223 @@
-# YO Log PRO v17.1 — Modificări UI Scroll & Responsive
+# 📻 YO Log PRO v17.1 — Full Edition
 
-**Bazat pe:** YO Log PRO v17.1 Full Edition — Ardei Constantin-Cătălin (YO8ACR)  
-**Modificări realizate de:** Patch UI — scroll bidirectional + geometrie responsivă  
+**Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)  
+**Versiune:** 17.1  
+**Compatibilitate:** Windows 7 / 8 / 10 / 11 (x64)  
+**Limbă interfață:** Română / Engleză  
 
----
-
-## Rezumat modificări
-
-## 1. Funcție nouă — `_responsive_geometry()`
-
-**Locație în cod:** deasupra clasei `TimerDialog`
-
-Înlocuiește apelurile fixe `.geometry("WxH")` din toate ferestrele popup cu o funcție care calculează dimensiunea optimă în funcție de rezoluția și scalarea ecranului curent.
-
-**Comportament:**
-- Fereastra nu depășește 92% din lățimea ecranului și 88% din înălțime
-- Se centrează automat față de fereastra părinte
-- Nu iese niciodată în afara marginilor ecranului
-- Funcționează corect la scalări DPI de 100%, 125%, 150%, 200%
-
-**Ferestre afectate (21 total):**
-
-| Fereastră | Geometrie originală | Geometrie nouă |
-|---|---|---|
-| Timer Concurs | 360×300 fix | responsivă |
-| Statistici (StatsWindow) | 560×520 fix | responsivă |
-| Contest Editor | 720×880 fix | responsivă |
-| Contest Manager | 750×500 fix | responsivă |
-| Search Dialog | 600×420 fix | responsivă |
-| CAT Settings | 560×620 fix | responsivă |
-| Cab2 Config | 420×250 fix | responsivă |
-| Preview Dialog | 750×550 fix | responsivă |
-| New Log Dialog | 420×260 fix | responsivă |
-| Theme Dialog | 620×540 fix | responsivă |
-| First Run Dialog | 560×680 fix | responsivă |
-| Log Editor | 1200×680 fix | responsivă |
-| Callbook Dialog | 780×600 fix | responsivă |
-| Band Map | 820×500 fix | responsivă |
-| DX Cluster | 860×520 fix | responsivă |
-| Rate Stats | 860×560 fix | responsivă |
-| Live Score Panel | 420×500 fix | responsivă |
-| About | 520×360 fix | responsivă |
-| Settings | 420×560 fix | responsivă |
-| Import Log | 280×200 fix | responsivă |
-| Export | 300×310 fix | responsivă |
+[![Build Status](https://github.com/acc1311/YOLogPRO_v17.1/actions/workflows/build.yml/badge.svg)](https://github.com/acc1311/YOLogPRO_v17.1/actions)
 
 ---
 
-## 2. Funcție nouă — `_make_scrollable_dialog()`
+## 📥 Descărcare
 
-**Locație în cod:** deasupra clasei `TimerDialog`
+| Fișier | Descriere |
+|--------|-----------|
+| `YO_Log_PRO_v17.1_Setup.exe` | ⭐ **Installer recomandat** — instalează în Program Files, creează scurtătură Desktop + meniu Start |
+| `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct, fără instalare |
+| `YO_Log_PRO_v17.1_Windows.zip` | Pachet complet (installer + portabil + manuale RO/EN) |
 
-Înfășoară conținutul oricărei ferestre popup într-un `Canvas` Tkinter cu scrollbar-uri pe **ambele axe** (vertical și orizontal).
-
-**Comportament:**
-- Scroll **vertical** — `MouseWheel` / `Button-4` / `Button-5` (Linux)
-- Scroll **orizontal** — `Shift + MouseWheel`
-- Scrollbar-urile se **ascund automat** când conținutul încape fără scroll
-- Evenimentele de scroll se **propagă la toate widget-urile copil** (Labels, Entries, LabelFrames etc.) cu re-binding automat la 200ms după construirea ferestrei
-- Dacă opțiunea din Setări este dezactivată, funcția returnează fereastra normală fără wrapping
-
-**Ferestre care folosesc scroll bidirectional:**
-- Timer Concurs
-- Setări (Settings)
+> Disponibile în tab-ul **[Releases](../../releases)** sau **[Actions → Artifacts](../../actions)**
 
 ---
 
-## 3. Opțiune nouă în Setări — „Activează scroll la ferestre popup"
+## 📋 Descriere
 
-**Locație:** meniu `Setări` → checkbox la baza listei de câmpuri
+YO Log PRO este un program complet de logare pentru radioamatori, destinat concursurilor naționale și internaționale. Suportă toate formatele standard de export/import, control CAT pentru transceivere, callbook online și multe altele.
 
-Un checkbox nou salvat în `config.json` ca `scroll_popups: true/false`.
+---
 
-- **Activat (implicit):** toate ferestrele popup au scroll bidirectional
-- **Dezactivat:** ferestrele revin la comportamentul original fără wrapping Canvas
+## ✅ Istoric modificări
 
-String-uri adăugate în dicționarele de limbă:
+### v17.1 — Versiunea curentă
+
+#### 🆕 Funcționalități noi
+
+**1. Opțiune format dată la export Cabrillo 2.0**
+
+La exportul Cabrillo 2.0, utilizatorul poate alege acum formatul datei din dialog:
+- `YYYY-MM-DD` — format standard Cabrillo, compatibil cu toate programele de arbitraj ✅ *(implicit)*
+- `YYYYMMDD` — format fără liniuțe, pentru compatibilitate cu programe mai vechi ✅
+
+Preferința se salvează automat și este reținută la exporturile următoare.
+
+**Fișier modificat:** `yo_log_pro_v171.py`  
+**Locații modificate:**
+- `class Cab2ConfigDialog` — adăugat dropdown „Format dată QSO" în dialog
+- `def _ok()` — returnează `date_fmt` în result
+- `def _exp_cab2()` — salvează preferința în `config.json` și aplică formatul ales
 
 ```python
-# Română
-"en_scroll": "Activează scroll la ferestre popup"
-
-# Engleză
-"en_scroll": "Enable scroll on popup windows"
-```
-
-Câmp adăugat în `DEFAULT_CFG`:
-
-```python
-"scroll_popups": True
+# Logică normalizare dată — acceptă ambele formate stocate intern:
+d_raw = q.get("d", "").replace("-", "")   # normalizează la YYYYMMDD
+if len(d_raw) == 8:
+    date = f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}" if date_fmt == "with_dash" else d_raw
 ```
 
 ---
 
-## 4. Fereastra principală — `_setup_win()` responsivă
+**2. Installer Windows (NSIS)**
 
-**Comportament original:**
-```python
-self.geometry("1280x780")
-self.minsize(1100, 680)
-```
+Adăugat installer profesional pentru Windows:
+- Instalare în `C:\Program Files\YO Log PRO\` ✅
+- Scurtătură pe **Desktop** cu icon ✅
+- Folder în **meniul Start** ✅
+- Apare în **Add/Remove Programs** (dezinstalare curată) ✅
+- Detectează versiunea existentă și oferă dezinstalare înainte de reinstalare ✅
+- La dezinstalare, întreabă dacă se șterg și datele salvate (loguri, configurații) ✅
 
-**Comportament nou:**
-```python
-# 96% din lățimea ecranului × 92% din înălțime
-def_w = max(900, min(1280, int(sw * 0.96)))
-def_h = max(600, min(780,  int(sh * 0.92)))
-self.geometry(f"{def_w}x{def_h}")
-
-# minsize dinamic: 55% lățime, 60% înălțime
-self.minsize(max(700, int(sw * 0.55)), max(480, int(sh * 0.60)))
-```
-
-Fereastra salvată în `win_geo` din `config.json` este respectată în continuare.
+**Fișier nou:** `installer.nsi`
 
 ---
 
-## 5. Bara de butoane de jos — `_build_btns()` responsive
+**3. Build automat GitHub Actions**
 
-**Problema originală:** la scalare 100% pe ecrane cu rezoluție mică, butoanele cu lățimi fixe (`w=9`, `w=10`) depășeau marginea ferestrei și nu se vedeau complet.
+Workflow complet de build automat:
+- ✅ Verificare sintaxă Python la fiecare push
+- ✅ Build EXE Windows cu PyInstaller (compatibil Win7+)
+- ✅ Build Installer cu NSIS
+- ✅ Generare ZIP complet (installer + portabil + docs)
+- ✅ Upload artifacts (disponibile 90 zile)
+- ✅ Creare automată GitHub Release la `workflow_dispatch` cu opțiunea activată
 
-**Soluție implementată:**
-
-- Butoanele sunt acum înfășurate într-un **Canvas cu scrollbar orizontal**
-- Scrollbar-ul apare **doar dacă butoanele nu încap** pe lățimea ferestrei (se ascunde automat altfel)
-- La ecrane cu lățime sub 1200px (scalare 100% pe monitoare mici), se activează automat **modul compact:**
-  - Font redus de la `Consolas 9` la `Consolas 8`
-  - Padding orizontal redus
-  - Butoanele se dimensionează după text (fără lățime fixă)
-- Scroll orizontal pe bara de butoane cu `MouseWheel` sau `Shift+MouseWheel`
+**Fișier modificat:** `.github/workflows/build.yml`
 
 ---
 
-## 6. Scrollbar-uri adăugate la Treeview-uri fără scroll
+**4. UI Scroll & Responsive**
 
-**Statistici Rate QSO (`RateStatsWindow`):**
-- Tabelul `Top DXCC` — scrollbar vertical adăugat
-- Tabelul `Per Bandă` — scrollbar vertical adăugat
-- Ambele tabele au binding `MouseWheel` pentru scroll cu rotița
+- Funcție `_responsive_geometry()` — ferestre popup adaptate la rezoluția și scalarea DPI (21 ferestre)
+- Funcție `_make_scrollable_dialog()` — scroll bidirectional (vertical + orizontal) în popup-uri
+- Opțiune în Setări: „Activează scroll la ferestre popup"
+- Fereastra principală responsivă — se adaptează la orice rezoluție
+- Bara de butoane cu scroll orizontal automat pe ecrane mici
+- Scrollbar-uri adăugate la Treeview-urile din statistici
+
+**5. Callbook Lookup**
+
+- Căutare radioamator.ro și QRZ.com cu extragere date
+- Previzualizare web integrată
+
+**6. DXCC Database**
+
+- Loader `cty.dat` cu suport extern + fallback intern
+
+**7. Live Contest Score Panel**
+
+- Scor în timp real cu rata QSO/h afișată grafic
+
+**8. CAT Radio complet**
+
+- Suport Yaesu, Icom, Kenwood, Elecraft, Hamlib
+- Polling configurabil, control frecvență și mod
+
+**9. Cabrillo 2.0 Export**
+
+- Export cu dialog configurabil pentru exchange
+- Preview înainte de salvare
+- Import Cabrillo 2.0 și 3.0
+
+**10. Log Editor dedicat**
+
+- Editare completă a QSO-urilor din log
+- Undo/Redo
 
 ---
 
-## Compatibilitate
+## 🔧 Compatibilitate
 
 | Sistem | Status |
-|---|---|
-| Windows 7 / 8 / 10 / 11 | ✅ Testat |
-| Linux (Tkinter) | ✅ Button-4/5 suportat |
-| macOS | ✅ MouseWheel standard |
-| Scalare DPI 100% | ✅ Rezolvat (v3) |
+|--------|--------|
+| Windows 7 (x64) | ✅ Testat |
+| Windows 8 / 8.1 | ✅ |
+| Windows 10 | ✅ Testat |
+| Windows 11 | ✅ Testat |
+| Scalare DPI 100% | ✅ |
 | Scalare DPI 125% | ✅ |
 | Scalare DPI 150% | ✅ |
-| Python 3.6+ | ✅ |
+| Scalare DPI 200% | ✅ |
+| Python 3.8+ | ✅ (doar sursă) |
 
 ---
 
-## Fișiere modificate
+## 📁 Formate suportate
 
-```
-yo_log_pro_v171.py  →  yo_log_pro_v171_scroll_v3.py
-```
+### Import
+| Format | Extensie | Note |
+|--------|----------|-------|
+| Cabrillo 2.0 / 3.0 | `.log`, `.cbr` | Detectare automată versiune |
+| ADIF | `.adi`, `.adif` | Standard internațional |
+| CSV | `.csv` | Auto-detectare separator |
+| JSON | `.json` | Format intern YO Log PRO |
+| EDI | `.edi` | Concursuri VHF/UHF |
 
-Niciun fișier extern (`.json`, `.dat`, `.log`, `.adi`) nu este afectat de aceste modificări.
+### Export
+| Format | Note |
+|--------|-------|
+| Cabrillo 2.0 | Cu opțiune format dată: `YYYY-MM-DD` sau `YYYYMMDD` |
+| Cabrillo 3.0 | Format standard internațional |
+| ADIF | `.adi` |
+| CSV | `.csv` |
+| PDF | Raport rezultate |
 
 ---
 
-*Modificări UI patch — compatibil cu YO Log PRO v17.1 Full Edition*
+## 🏆 Concursuri suportate
+
+- Maratonul Ion Creangă (IC)
+- Cupa 1 Decembrie
+- Cupa Moldovei
+- Cupa Tomis
+- Lucian Blaga
+- Memorial YO
+- Simple Log (logare generală)
+- Field Day, Sprint, QSO Party, SOTA, POTA
+- Concursuri custom (editor reguli inclus)
+
+---
+
+## 📂 Structura fișierelor
+
+```
+YOLogPRO_v17.1/
+├── yo_log_pro_v171.py          # Sursă principală
+├── installer.nsi               # Script installer NSIS
+├── icon.ico                    # Icon aplicație
+├── requirements.txt            # Dependențe Python
+├── README.md                   # Acest fișier
+├── docs/
+│   ├── MANUAL_RO.md            # Manual utilizare română
+│   └── MANUAL_EN.md            # Manual utilizare engleză
+└── .github/
+    └── workflows/
+        └── build.yml           # Workflow build automat
+```
+
+---
+
+## 🚀 Rulare din sursă
+
+```bash
+# Instalare dependențe
+pip install -r requirements.txt
+
+# Rulare
+python yo_log_pro_v171.py
+```
+
+**Dependențe principale:**
+- `tkinter` — inclusă în Python standard
+- `pyserial` — pentru CAT radio
+- `tkinterweb` — pentru previzualizare web callbook (opțional)
+
+---
+
+## 📞 Contact & Suport
+
+**Autor:** Ardei Constantin-Cătălin  
+**Indicativ:** YO8ACR  
+**GitHub:** [acc1311/YOLogPRO_v17.1](https://github.com/acc1311/YOLogPRO_v17.1)
+
+---
+
+*73 de YO8ACR! 📻*
