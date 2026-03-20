@@ -17,7 +17,7 @@
 | `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct, fără instalare |
 | `YO_Log_PRO_v17.1_Windows.zip` | Pachet complet (installer + portabil + manuale RO/EN) |
 
-> Disponibile în tab-ul **[Releases](../../releases)** sau **[Actions → Artifacts](../../actions)**
+> Disponibile în tab-ul **[Releases](../../releases)**
 
 ---
 
