@@ -8,6 +8,7 @@ Unicode True
 
 !include "MUI2.nsh"
 !include "x64.nsh"
+!include "FileFunc.nsh"
 
 ; ── Informatii generale ───────────────────────────────────────
 !define APP_NAME        "YO Log PRO"
@@ -112,10 +113,8 @@ Section "YO Log PRO (obligatoriu)" SecMain
     WriteRegDWORD HKLM "${REG_KEY}" "NoModify"         1
     WriteRegDWORD HKLM "${REG_KEY}" "NoRepair"         1
 
-    ; ── Calculeaza dimensiunea instalarii ────────────────────
-    ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
-    IntFmt $0 "0x%08X" $0
-    WriteRegDWORD HKLM "${REG_KEY}" "EstimatedSize" "$0"
+    ; ── Dimensiune estimata instalare (~30 MB) ────────────────
+    WriteRegDWORD HKLM "${REG_KEY}" "EstimatedSize" 30720
 
     ; ── Scrie uninstaller ─────────────────────────────────────
     WriteUninstaller "$INSTDIR\Uninstall.exe"
