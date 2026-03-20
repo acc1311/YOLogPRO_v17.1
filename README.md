@@ -14,7 +14,7 @@
 | Fișier | Descriere |
 |--------|-----------|
 | `YO_Log_PRO_v17.1_Setup.exe` | ⭐ **Installer recomandat** — instalează în Program Files, creează scurtătură Desktop + meniu Start |
-| `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct, fără instalare |
+| `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct dar să fie într-un folder dedicat, fără instalare |
 | `YO_Log_PRO_v17.1_Windows.zip` | Pachet complet (installer + portabil + manuale RO/EN) |
 
 > Disponibile în tab-ul **[Releases](../../releases)**
