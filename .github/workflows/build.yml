@@ -1,4 +1,4 @@
-name: 📻 Build YO Log PRO v17.1 — Windows EXE
+name: 📻 Build YO Log PRO v17.1 — Windows Installer
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - "yo_log_pro_v171.py"
       - ".github/workflows/build.yml"
+      - "installer.nsi"
   pull_request:
     branches: [ main, master ]
   release:
@@ -16,6 +17,14 @@ on:
         description: "Sufix optional (ex: beta1, rc1) — lasa gol pentru release normal"
         required: false
         default: ""
+      create_release:
+        description: "Creaza GitHub Release automat?"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: write
@@ -27,9 +36,9 @@ jobs:
     name: 🔍 Verificare sintaxa Python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.8"
 
@@ -43,29 +52,29 @@ jobs:
           pip install pyflakes --quiet
           python -m pyflakes yo_log_pro_v171.py || true
 
-  # ── JOB 2: Build EXE Windows ──────────────────────────
+  # ── JOB 2: Build EXE + Installer Windows ──────────────
   build-windows:
-    name: 🪟 Build Windows EXE (Win7 compat)
+    name: 🪟 Build EXE + Installer (Win7/8/10/11)
     runs-on: windows-latest
     needs: lint
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Python 3.8
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.8"
           cache: "pip"
 
-      - name: Instalare dependente
+      - name: Instalare dependente Python
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller==6.3.0
           pip install pyserial
-          pip install tkinterweb  || echo "tkinterweb  optional"
-          pip install tkhtmlview  || echo "tkhtmlview  optional"
+          pip install tkinterweb  || echo "tkinterweb optional"
+          pip install tkhtmlview  || echo "tkhtmlview optional"
 
       - name: Generare nume build
         id: meta
@@ -94,13 +103,13 @@ jobs:
             echo "Fara icon.ico — build continua"
           fi
 
-      - name: Build EXE (cu icon)
+      - name: Build EXE (cu icon) — Win7 compatibil
         if: steps.icon.outputs.has_icon == 'true'
         shell: cmd
         run: |
           pyinstaller ^
             --onefile --windowed ^
-            --name "${{ steps.meta.outputs.exe_name }}" ^
+            --name "YO_Log_PRO_v17.1" ^
             --icon "icon.ico" ^
             --add-data "README.md;." ^
             --add-data "docs;docs" ^
@@ -133,16 +142,17 @@ jobs:
             --hidden-import tkhtmlview ^
             --collect-all tkinter ^
             --collect-all tkinterweb ^
+            --target-arch x86_64 ^
             --noupx ^
             yo_log_pro_v171.py
 
-      - name: Build EXE (fara icon)
+      - name: Build EXE (fara icon) — Win7 compatibil
         if: steps.icon.outputs.has_icon != 'true'
         shell: cmd
         run: |
           pyinstaller ^
             --onefile --windowed ^
-            --name "${{ steps.meta.outputs.exe_name }}" ^
+            --name "YO_Log_PRO_v17.1" ^
             --add-data "README.md;." ^
             --add-data "docs;docs" ^
             --hidden-import tkinter ^
@@ -174,6 +184,7 @@ jobs:
             --hidden-import tkhtmlview ^
             --collect-all tkinter ^
             --collect-all tkinterweb ^
+            --target-arch x86_64 ^
             --noupx ^
             yo_log_pro_v171.py
 
@@ -184,55 +195,155 @@ jobs:
           $mb  = [math]::Round($exe.Length / 1MB, 2)
           Write-Host "✅ EXE: $($exe.Name) — $mb MB"
 
-      - name: Creare ZIP (EXE + docs + icon)
+      # ── NSIS Installer ────────────────────────────────────
+      - name: Instalare NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Verificare installer.nsi
+        shell: bash
+        run: |
+          if [ ! -f "installer.nsi" ]; then
+            echo "❌ EROARE: installer.nsi lipseste din repo!"
+            exit 1
+          fi
+          echo "✅ installer.nsi gasit"
+
+      - name: Build Installer NSIS
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\NSIS\makensis.exe" /V4 installer.nsi
+          if errorlevel 1 (
+            echo ❌ NSIS build esuat!
+            exit /b 1
+          )
+          echo ✅ Installer creat cu succes!
+
+      - name: Verificare installer generat
+        shell: pwsh
+        run: |
+          $setup = Get-Item "YO_Log_PRO_v17.1_Setup.exe"
+          $mb    = [math]::Round($setup.Length / 1MB, 2)
+          Write-Host "✅ Setup: $($setup.Name) — $mb MB"
+
+      # ── Creare ZIP complet ─────────────────────────────────
+      - name: Creare ZIP (Installer + EXE portabil + docs)
         shell: pwsh
         run: |
           $name = "${{ steps.meta.outputs.exe_name }}"
-          Copy-Item "README.md" "dist\README.md"
-          if (Test-Path "docs")     { Copy-Item "docs"     "dist\docs"     -Recurse }
-          if (Test-Path "icon.ico") { Copy-Item "icon.ico" "dist\icon.ico" }
-          Compress-Archive -Path "dist\*" -DestinationPath "${name}_Windows.zip" -Force
+          New-Item -ItemType Directory -Path "release_pkg" -Force
+          Copy-Item "YO_Log_PRO_v17.1_Setup.exe"        "release_pkg\"
+          Copy-Item "dist\YO_Log_PRO_v17.1.exe"         "release_pkg\YO_Log_PRO_v17.1_Portabil.exe"
+          Copy-Item "README.md"                          "release_pkg\"
+          if (Test-Path "docs")     { Copy-Item "docs"     "release_pkg\docs"     -Recurse }
+          if (Test-Path "icon.ico") { Copy-Item "icon.ico" "release_pkg\icon.ico" }
+          Compress-Archive -Path "release_pkg\*" -DestinationPath "${name}_Windows.zip" -Force
           Write-Host "✅ ZIP: ${name}_Windows.zip"
 
-      - name: Upload EXE artifact (90 zile)
-        uses: actions/upload-artifact@v4.6.2
+      # ── Upload Artifacts ───────────────────────────────────
+      - name: Upload Installer artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: YO_Log_PRO_v17.1_EXE
-          path: dist/${{ steps.meta.outputs.exe_name }}.exe
+          name: YO_Log_PRO_v17.1_Setup
+          path: YO_Log_PRO_v17.1_Setup.exe
           retention-days: 90
           if-no-files-found: error
 
-      - name: Upload ZIP artifact (90 zile)
-        uses: actions/upload-artifact@v4.6.2
+      - name: Upload EXE portabil artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YO_Log_PRO_v17.1_EXE_Portabil
+          path: dist/YO_Log_PRO_v17.1.exe
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
         with:
           name: YO_Log_PRO_v17.1_ZIP
           path: ${{ steps.meta.outputs.exe_name }}_Windows.zip
           retention-days: 90
 
-      - name: Atasare la GitHub Release
+      # ── Release la eveniment release GitHub ───────────────
+      - name: Atasare la GitHub Release (release creat manual)
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2.2.1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/${{ steps.meta.outputs.exe_name }}.exe
+            YO_Log_PRO_v17.1_Setup.exe
+            dist/YO_Log_PRO_v17.1.exe
             ${{ steps.meta.outputs.exe_name }}_Windows.zip
           body: |
             ## 📻 YO Log PRO v17.1 — Full Edition
 
             **Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)
 
-            ### Descărcare:
-            - `YO_Log_PRO_v17.1.exe` — Windows 7/8/10/11, fără instalare
-            - `YO_Log_PRO_v17.1_Windows.zip` — EXE + manuale RO/EN
+            ### 📥 Descărcare:
+            | Fișier | Descriere |
+            |--------|-----------|
+            | `YO_Log_PRO_v17.1_Setup.exe` | ⭐ **Installer recomandat** — instalează în Program Files, scurtătură Desktop + meniu Start |
+            | `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct, fără instalare |
+            | `YO_Log_PRO_v17.1_Windows.zip` | Pachet complet (installer + portabil + manuale) |
 
-            ### Nou în v17.1:
+            ### ✅ Nou în această versiune:
+            - 📅 Opțiune format dată export Cabrillo 2.0 (`YYYY-MM-DD` / `YYYYMMDD`)
             - 📝 Log Editor dedicat cu editare completă
-            - 🌐 Callbook radioamator.ro + QRZ.com cu previzualizare web
+            - 🌐 Callbook radioamator.ro + QRZ.com
             - 📡 Band Map + DX Cluster + Scor Live
             - ⏱ Timer cu avertizări sonore 5/3/1 min
             - 📻 CAT Radio complet (Yaesu/Icom/Kenwood/Elecraft/Hamlib)
 
-            **Build** #${{ github.run_number }} | ${{ steps.meta.outputs.build_date }}
+            ### 💻 Compatibilitate:
+            - ✅ Windows 7 / 8 / 10 / 11 (x64)
+            - ✅ Fără Python necesar
+            - ✅ Apare în Add/Remove Programs (dezinstalare curată)
+
+            **Build** #${{ github.run_number }} | **Data** ${{ steps.meta.outputs.build_date }}
+
+            73 de YO8ACR! 📻
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Release automat via workflow_dispatch ──────────────
+      - name: Creare Release automat (workflow_dispatch)
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v17.1-build-${{ steps.meta.outputs.build_date }}
+          name: "📻 YO Log PRO v17.1 — ${{ steps.meta.outputs.build_date }}"
+          draft: false
+          prerelease: false
+          files: |
+            YO_Log_PRO_v17.1_Setup.exe
+            dist/YO_Log_PRO_v17.1.exe
+            ${{ steps.meta.outputs.exe_name }}_Windows.zip
+          body: |
+            ## 📻 YO Log PRO v17.1 — Full Edition
+
+            **Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)
+
+            ### 📥 Descărcare:
+            | Fișier | Descriere |
+            |--------|-----------|
+            | `YO_Log_PRO_v17.1_Setup.exe` | ⭐ **Installer recomandat** — instalează în Program Files, scurtătură Desktop + meniu Start |
+            | `YO_Log_PRO_v17.1.exe` | Versiune portabilă — rulează direct, fără instalare |
+            | `YO_Log_PRO_v17.1_Windows.zip` | Pachet complet (installer + portabil + manuale) |
+
+            ### ✅ Nou în această versiune:
+            - 📅 Opțiune format dată export Cabrillo 2.0 (`YYYY-MM-DD` / `YYYYMMDD`)
+            - 📝 Log Editor dedicat cu editare completă
+            - 🌐 Callbook radioamator.ro + QRZ.com
+            - 📡 Band Map + DX Cluster + Scor Live
+            - ⏱ Timer cu avertizări sonore 5/3/1 min
+            - 📻 CAT Radio complet (Yaesu/Icom/Kenwood/Elecraft/Hamlib)
+
+            ### 💻 Compatibilitate:
+            - ✅ Windows 7 / 8 / 10 / 11 (x64)
+            - ✅ Fără Python necesar
+            - ✅ Apare în Add/Remove Programs (dezinstalare curată)
+
+            **Build** #${{ github.run_number }} | **Data** ${{ steps.meta.outputs.build_date }}
 
             73 de YO8ACR! 📻
         env:
@@ -252,15 +363,20 @@ jobs:
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.lint.result }}" = "success" ]; then
-            echo "| 🔍 Lint sintaxa     | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔍 Lint sintaxa        | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| 🔍 Lint sintaxa     | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔍 Lint sintaxa        | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ needs.build-windows.result }}" = "success" ]; then
-            echo "| 🪟 Build EXE Windows | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🪟 Build EXE+Installer | ✅ OK   |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| 🪟 Build EXE Windows | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🪟 Build EXE Windows   | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
           fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts generate:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`YO_Log_PRO_v17.1_Setup.exe\` — Installer cu scurtătură Desktop + meniu Start" >> $GITHUB_STEP_SUMMARY
+          echo "- \`YO_Log_PRO_v17.1_Portabil.exe\` — Versiune portabilă" >> $GITHUB_STEP_SUMMARY
+          echo "- \`YO_Log_PRO_v17.1_Windows.zip\` — Pachet complet" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Run** #${{ github.run_number }} | **Branch** \`${{ github.ref_name }}\` | **SHA** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
