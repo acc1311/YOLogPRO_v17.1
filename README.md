@@ -33,7 +33,7 @@ YO Log PRO este un program complet de logare pentru radioamatori, destinat concu
 
 #### 🆕 Funcționalități noi
 
-**1. Opțiune format dată la export Cabrillo 2.0**
+** Opțiune format dată la export Cabrillo 2.0**
 
 La exportul Cabrillo 2.0, utilizatorul poate alege acum formatul datei din dialog:
 - `YYYY-MM-DD` — format standard Cabrillo, compatibil cu toate programele de arbitraj ✅ *(implicit)*
@@ -56,7 +56,7 @@ if len(d_raw) == 8:
 
 ---
 
-**2. Installer Windows (NSIS)**
+** Installer Windows (NSIS)**
 
 Adăugat installer profesional pentru Windows:
 - Instalare în `C:\Program Files\YO Log PRO\` ✅
@@ -70,21 +70,7 @@ Adăugat installer profesional pentru Windows:
 
 ---
 
-**3. Build automat GitHub Actions**
-
-Workflow complet de build automat:
-- ✅ Verificare sintaxă Python la fiecare push
-- ✅ Build EXE Windows cu PyInstaller (compatibil Win7+)
-- ✅ Build Installer cu NSIS
-- ✅ Generare ZIP complet (installer + portabil + docs)
-- ✅ Upload artifacts (disponibile 90 zile)
-- ✅ Creare automată GitHub Release la `workflow_dispatch` cu opțiunea activată
-
-**Fișier modificat:** `.github/workflows/build.yml`
-
----
-
-**4. UI Scroll & Responsive**
+** UI Scroll & Responsive**
 
 - Funcție `_responsive_geometry()` — ferestre popup adaptate la rezoluția și scalarea DPI (21 ferestre)
 - Funcție `_make_scrollable_dialog()` — scroll bidirectional (vertical + orizontal) în popup-uri
@@ -93,12 +79,12 @@ Workflow complet de build automat:
 - Bara de butoane cu scroll orizontal automat pe ecrane mici
 - Scrollbar-uri adăugate la Treeview-urile din statistici
 
-**5. Callbook Lookup**
+** Callbook Lookup**
 
 - Căutare radioamator.ro și QRZ.com cu extragere date
 - Previzualizare web integrată
 
-**6. DXCC Database**
+** DXCC Database**
 
 - Loader `cty.dat` cu suport extern + fallback intern
 
@@ -106,18 +92,18 @@ Workflow complet de build automat:
 
 - Scor în timp real cu rata QSO/h afișată grafic
 
-**8. CAT Radio complet**
+** CAT Radio complet**
 
 - Suport Yaesu, Icom, Kenwood, Elecraft, Hamlib
 - Polling configurabil, control frecvență și mod
 
-**9. Cabrillo 2.0 Export**
+** Cabrillo 2.0 Export**
 
 - Export cu dialog configurabil pentru exchange
 - Preview înainte de salvare
 - Import Cabrillo 2.0 și 3.0
 
-**10. Log Editor dedicat**
+** Log Editor dedicat**
 
 - Editare completă a QSO-urilor din log
 - Undo/Redo
