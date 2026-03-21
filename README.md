@@ -1,4 +1,4 @@
-# 📻 YO Log PRO v17.1 — Full Edition
+# 📻 YO Log PRO v17.1
 
 **Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)  
 **Versiune:** 17.1  
