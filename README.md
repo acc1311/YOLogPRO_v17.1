@@ -1,3 +1,5 @@
+Versiune nouă 18 cu fix-uri: https://github.com/acc1311/YO-Log-PRO-v18-Full-Edition
+
 # 📻 YO Log PRO v17.1
 
 **Dezvoltat de:** Ardei Constantin-Cătălin (YO8ACR)  
